@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">REMOTE_TV</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Manage appearance, language, and your profile</string>
+    <string name="section_account">ACCOUNT</string>
+    <string name="section_preferences">PREFERENCES</string>
+    <string name="section_about">ABOUT</string>
+
+    <string name="profile_edit">Edit profile</string>
+    <string name="profile_name">Display name</string>
+    <string name="profile_email">Email</string>
+    <string name="profile_email_placeholder">No email added</string>
+    <string name="profile_error_name_empty">Display name cannot be empty.</string>
+    <string name="profile_error_email_invalid">Email format is invalid.</string>
+
+    <string name="theme_mode">Theme mode</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_light">Light</string>
+
+    <string name="language_title">Language</string>
+    <string name="language_english">English</string>
+    <string name="language_vietnamese">Tiếng Việt</string>
+
+    <string name="save_action">Save</string>
+    <string name="cancel_action">Cancel</string>
+
+    <string name="account_type">Account type</string>
+    <string name="account_type_local">Local profile</string>
+    <string name="app_version">App version</string>
+</resources>

@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">REMOTE_TV</string>
+    <string name="settings_title">Cai dat</string>
+    <string name="settings_subtitle">Quan ly giao dien, ngon ngu va ho so cua ban</string>
+    <string name="section_account">TAI KHOAN</string>
+    <string name="section_preferences">TUY CHON</string>
+    <string name="section_about">THONG TIN</string>
+
+    <string name="profile_edit">Sua ho so</string>
+    <string name="profile_name">Ten hien thi</string>
+    <string name="profile_email">Email</string>
+    <string name="profile_email_placeholder">Chua them email</string>
+    <string name="profile_error_name_empty">Ten hien thi khong duoc de trong.</string>
+    <string name="profile_error_email_invalid">Dinh dang email khong hop le.</string>
+
+    <string name="theme_mode">Che do giao dien</string>
+    <string name="theme_dark">Toi</string>
+    <string name="theme_light">Sang</string>
+
+    <string name="language_title">Ngon ngu</string>
+    <string name="language_english">English</string>
+    <string name="language_vietnamese">Tieng Viet</string>
+
+    <string name="save_action">Luu</string>
+    <string name="cancel_action">Huy</string>
+
+    <string name="account_type">Loai tai khoan</string>
+    <string name="account_type_local">Ho so local</string>
+    <string name="app_version">Phien ban ung dung</string>
+</resources>
