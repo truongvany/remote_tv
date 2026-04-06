@@ -20,23 +20,31 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
     private var session: DefaultClientWebSocketSession? = null
 
     override suspend fun connect(ip: String, port: Int): Boolean {
-        return try {
-            val scheme = if (port == 8002) "wss" else "ws"
-            val encodedName = encodedClientName("REMOTE_TV")
-            val url = "$scheme://$ip:$port/api/v2/channels/samsung.remote.control?name=$encodedName"
-            InAppDiagnostics.info(tag, "Open Samsung socket: $url")
+        val encodedName = encodedClientName("REMOTE_TV")
+        val schemes = schemesForPort(port)
 
-            session = client.webSocketSession {
-                url(url)
-                header("Origin", "http://$ip")
+        schemes.forEach { scheme ->
+            try {
+                val url = "$scheme://$ip:$port/api/v2/channels/samsung.remote.control?name=$encodedName"
+                InAppDiagnostics.info(tag, "Open Samsung socket: $url")
+
+                session = client.webSocketSession {
+                    url(url)
+                    header("Origin", "http://$ip")
+                }
+
+                InAppDiagnostics.info(tag, "Samsung socket connected at $ip:$port via $scheme")
+                return true
+            } catch (e: Exception) {
+                InAppDiagnostics.error(
+                    tag,
+                    "Samsung connect exception at $ip:$port via $scheme => ${e::class.simpleName}: ${e.message}"
+                )
+                session = null
             }
-
-            InAppDiagnostics.info(tag, "Samsung socket connected at $ip:$port")
-            true
-        } catch (e: Exception) {
-            InAppDiagnostics.error(tag, "Samsung connect exception at $ip:$port => ${e::class.simpleName}: ${e.message}")
-            false
         }
+
+        return false
     }
 
     override suspend fun disconnect() {
@@ -93,5 +101,13 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
     private fun encodedClientName(name: String): String {
         val base64Name = Base64.getEncoder().encodeToString(name.toByteArray(Charsets.UTF_8))
         return URLEncoder.encode(base64Name, Charsets.UTF_8.name())
+    }
+
+    private fun schemesForPort(port: Int): List<String> {
+        return when (port) {
+            8002 -> listOf("wss")
+            8009 -> listOf("wss", "ws")
+            else -> listOf("ws")
+        }
     }
 }
