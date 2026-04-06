@@ -27,28 +27,28 @@ class AndroidTVRemoteProtocol : TVProtocol {
     companion object {
         // Phím mã (KEYCODE) theo chuẩn Android
         private val KEY_MAP = mapOf(
-            "UP"         to 19,
-            "MOVE_UP"    to 19,
-            "DOWN"       to 20,
-            "MOVE_DOWN"  to 20,
-            "LEFT"       to 21,
-            "MOVE_LEFT"  to 21,
-            "RIGHT"      to 22,
+            "UP" to 19,
+            "MOVE_UP" to 19,
+            "DOWN" to 20,
+            "MOVE_DOWN" to 20,
+            "LEFT" to 21,
+            "MOVE_LEFT" to 21,
+            "RIGHT" to 22,
             "MOVE_RIGHT" to 22,
-            "OK"         to 66,
-            "ENTER"      to 66,
-            "KEY_ENTER"  to 66,
-            "KEY_BACK"   to 4,
-            "KEY_HOME"   to 3,
+            "OK" to 66,
+            "ENTER" to 66,
+            "KEY_ENTER" to 66,
+            "KEY_BACK" to 4,
+            "KEY_HOME" to 3,
             "KEY_VOL_UP" to 24,
             "KEY_VOL_DOWN" to 25,
-            "KEY_MUTE"   to 164,
-            "SEARCH"     to 84,
+            "KEY_MUTE" to 164,
+            "SEARCH" to 84,
             "KEY_SEARCH" to 84,
-            "VOICE"      to 231,
-            "KEY_VOICE"  to 231,
-            "KEY_POWER"  to 26,
-            "KEY_MENU"   to 82,
+            "VOICE" to 231,
+            "KEY_VOICE" to 231,
+            "KEY_POWER" to 26,
+            "KEY_MENU" to 82,
             "KEY_PLAY_PAUSE" to 85,
         )
     }
@@ -74,7 +74,8 @@ class AndroidTVRemoteProtocol : TVProtocol {
             outputStream?.close()
             inputStream?.close()
             socket?.close()
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
         socket = null
         outputStream = null
         inputStream = null
@@ -122,10 +123,34 @@ class AndroidTVRemoteProtocol : TVProtocol {
     }
 
     override suspend fun launchApp(appId: String): Boolean = withContext(Dispatchers.IO) {
-        // Android TV Remote protocol không hỗ trợ launch app trực tiếp
-        // Có thể dùng intent qua ADB; bỏ qua trong scope đồ án này
-        Log.d(TAG, "launchApp not supported in AndroidTVRemoteProtocol: $appId")
-        false
+        // Đã được Hoàng Văn Huy fix: Sử dụng ADB (Port 5555) để ép TV mở App
+        return@withContext try {
+            Log.d(TAG, "Attempting to launch app via ADB: $appId")
+
+            // Lấy IP từ socket hiện tại đang kết nối (nếu có)
+            val ip = socket?.inetAddress?.hostAddress ?: return@withContext false
+
+            // Tạo 1 kết nối ADB song song vào cổng 5555
+            val adbSocket = Socket()
+            adbSocket.connect(InetSocketAddress(ip, 5555), 2000)
+            val out = adbSocket.getOutputStream()
+
+            val command = if (appId.startsWith("am start")) {
+                "$appId\n"
+            } else {
+                "monkey -p $appId -c android.intent.category.LAUNCHER 1\n"
+            }
+
+            out.write(command.toByteArray())
+            out.flush()
+            adbSocket.close()
+
+            Log.d(TAG, "Launch command sent successfully!")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "launchApp ADB error: ${e.message}")
+            false
+        }
     }
 }
 

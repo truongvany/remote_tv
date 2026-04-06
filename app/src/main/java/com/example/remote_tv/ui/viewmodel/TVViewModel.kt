@@ -8,6 +8,9 @@ import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import java.net.Inet4Address
+import java.net.Socket
+import java.net.InetSocketAddress
+import android.util.Log
 import android.util.Patterns
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -19,12 +22,14 @@ import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.data.preferences.AppPreferencesRepository
 import com.example.remote_tv.data.repository.TVRepository
 import com.example.remote_tv.data.repository.TVRepositoryImpl
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class TVViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -157,20 +162,61 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     fun home()          = sendCommand("KEY_HOME")
     fun menu()          = sendCommand("KEY_MENU")
 
+    // =======================================================
+    // ĐÃ UPDATE: KẾT HỢP REPOSITORY CỦA Ý VÀ ADB CỦA HUY
+    // =======================================================
     fun launchApp(appId: String) {
         viewModelScope.launch {
+            // Bước 1: Thử gọi theo luồng chuẩn của Repository
             val result = repository.launchApp(appId)
+
+            // Bước 2: Nếu giao thức chuẩn từ chối (UNSUPPORTED) hoặc thất bại
             if (!result.isSuccess) {
-                val message = when (result.status) {
-                    AppLaunchStatus.NO_SESSION -> "Connect TV before using Quick Launch"
-                    AppLaunchStatus.UNSUPPORTED -> "Quick Launch is not supported on this connection"
-                    AppLaunchStatus.FAILED -> "App launch failed: ${result.resolvedAppId}"
-                    AppLaunchStatus.SUCCESS -> null
+                // Lấy IP của TV đang kết nối hiện tại
+                val ip = currentDevice.value?.ipAddress
+
+                if (ip != null) {
+                    Log.d("TVViewModel", "Fallback sang ADB để mở app: $appId trên IP: $ip")
+
+                    // Gọi bí thuật ADB của Huy
+                    val adbSuccess = launchAppViaAdb(ip, appId)
+
+                    if (adbSuccess) {
+                        _uiState.update { it.copy(actionMessage = "Đã gửi lệnh mở App qua ADB") }
+                    } else {
+                        _uiState.update { it.copy(actionMessage = "ADB thất bại: TV chưa bật gỡ lỗi hoặc sai IP") }
+                    }
+                } else {
+                    _uiState.update { it.copy(actionMessage = "Vui lòng kết nối TV trước khi dùng Quick Launch") }
                 }
-                _uiState.update { it.copy(actionMessage = message) }
+            } else {
+                // Nếu giao thức gốc mở thành công
+                _uiState.update { it.copy(actionMessage = null) }
             }
         }
     }
+
+    // Hàm phụ trợ xử lý Socket ADB của Huy chạy trên luồng nền (IO)
+    private suspend fun launchAppViaAdb(ip: String, packageName: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val socket = Socket()
+            socket.connect(InetSocketAddress(ip, 5555), 2000)
+            val out = socket.getOutputStream()
+            val command = if (packageName.startsWith("am start")) {
+                "$packageName\n"
+            } else {
+                "monkey -p $packageName -c android.intent.category.LAUNCHER 1\n"
+            }
+            out.write(command.toByteArray())
+            out.flush()
+            socket.close()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+    // =======================================================
 
     fun consumeActionMessage() {
         _uiState.update { it.copy(actionMessage = null) }
