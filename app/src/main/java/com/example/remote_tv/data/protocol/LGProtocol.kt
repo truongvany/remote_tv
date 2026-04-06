@@ -1,5 +1,6 @@
 package com.example.remote_tv.data.protocol
 
+import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -7,6 +8,7 @@ import io.ktor.http.*
 import kotlinx.serialization.json.*
 
 class LGProtocol(private val client: HttpClient) : TVProtocol {
+    private val tag = "LGProtocol"
     private var clientKey: String? = null
 
     override suspend fun connect(ip: String, port: Int): Boolean {
@@ -27,21 +29,12 @@ class LGProtocol(private val client: HttpClient) : TVProtocol {
     }
 
     override suspend fun sendCommand(command: String): Boolean {
-        // LG uses specific XML or JSON payloads for commands
-        return try {
-            // Placeholder for actual LG HTTP command
-            true
-        } catch (e: Exception) {
-            false
-        }
+        Log.w(tag, "LG command bridge is not implemented yet. command=$command")
+        return false
     }
 
     override suspend fun launchApp(appId: String): Boolean {
-        return try {
-            // Placeholder for actual LG App Launch
-            true
-        } catch (e: Exception) {
-            false
-        }
+        Log.w(tag, "LG app launch bridge is not implemented yet. appId=$appId")
+        return false
     }
 }

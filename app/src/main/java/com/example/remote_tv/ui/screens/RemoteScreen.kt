@@ -1,5 +1,8 @@
 package com.example.remote_tv.ui.screens
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +28,7 @@ import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.ui.components.DeviceSelectionDialog
 import com.example.remote_tv.ui.theme.OrangeAccent
 import com.example.remote_tv.ui.viewmodel.TVViewModel
+import kotlinx.coroutines.delay
 
 private data class NavTab(val icon: ImageVector, val contentDescription: String)
 
@@ -39,7 +43,39 @@ private val navTabs = listOf(
 fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val discoveredDevices by viewModel.discoveredDevices.collectAsState()
+    val currentDevice by viewModel.currentDevice.collectAsState()
+    val connectingDeviceKey by viewModel.connectingDeviceKey.collectAsState()
+    val isScanning by viewModel.isScanning.collectAsState()
+    val scanError by viewModel.scanError.collectAsState()
+    val connectionError by viewModel.connectionError.collectAsState()
+    val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val settingsUiState by viewModel.settingsUiState.collectAsState()
+
+    var lastConnectedKey by remember { mutableStateOf<String?>(null) }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = viewModel::onLocationPermissionResult,
+    )
+
+    LaunchedEffect(uiState.selectedTab, uiState.hasLocationPermission) {
+        if (uiState.selectedTab == 2) {
+            if (uiState.hasLocationPermission) {
+                viewModel.onCastTabOpened()
+            } else {
+                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+        }
+    }
+
+    LaunchedEffect(currentDevice?.ipAddress, currentDevice?.port, uiState.selectedTab) {
+        val currentKey = currentDevice?.let { "${it.ipAddress}:${it.port}" }
+        if (currentKey != null && currentKey != lastConnectedKey && uiState.selectedTab == 2) {
+            delay(1000)
+            viewModel.selectTab(0)
+        }
+        lastConnectedKey = currentKey
+    }
 
     if (uiState.showDeviceDialog) {
         DeviceSelectionDialog(
@@ -71,6 +107,30 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
             when (uiState.selectedTab) {
                 0 -> MainRemoteTab(viewModel)
                 1 -> ChannelsScreen()
+                2 -> CastScreen(
+                    devices = discoveredDevices,
+                    connectedDevice = currentDevice,
+                    connectingDeviceKey = connectingDeviceKey,
+                    isScanning = isScanning,
+                    scanError = scanError,
+                    connectionError = connectionError,
+                    hasLocationPermission = uiState.hasLocationPermission,
+                    localIpAddress = uiState.localIpAddress,
+                    localSubnet = uiState.localSubnet,
+                    diagnosticLogs = diagnosticLogs,
+                    onRequestPermission = {
+                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    },
+                    onRefreshScan = {
+                        if (uiState.hasLocationPermission) {
+                            viewModel.refreshCastScan()
+                        } else {
+                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                        }
+                    },
+                    onDeviceSelected = viewModel::connectToDevice,
+                    onClearDiagnostics = viewModel::clearDiagnosticLogs,
+                )
                 3 -> SettingsScreen(
                     settingsUiState = settingsUiState,
                     onThemeChanged = { isDarkMode ->
