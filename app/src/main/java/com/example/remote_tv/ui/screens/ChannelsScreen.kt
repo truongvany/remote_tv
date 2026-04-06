@@ -28,28 +28,30 @@ import com.example.remote_tv.ui.theme.CardBackground
 import com.example.remote_tv.ui.theme.OrangeAccent
 import com.example.remote_tv.ui.theme.TextSecondary
 
+// 1. Sửa Data Class: Đổi Channel thành AppItem và thêm packageName
 data class TrendingItem(val title: String, val category: String, val isNew: Boolean = false, val isLive: Boolean = false)
-data class Channel(val name: String, val subtitle: String, val isSelected: Boolean = false)
+data class AppItem(val name: String, val subtitle: String, val packageName: String, val isSelected: Boolean = false)
 
 private val trendingList = listOf(
-    TrendingItem("Neon Protocol", "Action • Sci-Fi", isNew = true),
-    TrendingItem("The Mandalorian", "Sci-Fi • Adventure", isLive = true),
-    TrendingItem("Dark Matter", "Thriller", isNew = true)
+    TrendingItem("Quick Launch", "Trải nghiệm mượt mà", isNew = true),
+    TrendingItem("Cast Screen", "Chia sẻ màn hình", isLive = true),
+    TrendingItem("Cài đặt", "Hệ thống", isNew = true)
 )
 
-private val channelList = listOf(
-    Channel("HBO", "The Last of Us", isSelected = true),
-    Channel("CNN", "Global Report"),
-    Channel("DSY", "Deep Ocean"),
-    Channel("GEO", "Wild Savanna"),
-    Channel("MTV", "Music Live"),
-    Channel("BBC", "World News"),
-    Channel("SPN", "Game Day"),
-    Channel("FOX", "Primetime")
+// 2. Danh sách App thực tế trên Android TV
+private val appList = listOf(
+    AppItem("YouTube", "Video & Music", "com.google.android.youtube.tv", isSelected = true),
+    AppItem("Netflix", "Movies & Shows", "com.netflix.ninja"),
+    AppItem("Play Store", "Tải ứng dụng", "com.android.vending"),
+    AppItem("Cài đặt", "Hệ thống TV", "am start -a android.settings.SETTINGS"),
+    AppItem("Prime", "Amazon Video", "com.amazon.amazonvideo.livingroom"),
+    AppItem("Spotify", "Music", "com.spotify.tv.android")
 )
 
 @Composable
-fun ChannelsScreen() {
+fun ChannelsScreen(
+    onLaunchApp: (String) -> Unit = {} // Hàm callback bắn Package Name ra ngoài để xử lý
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -58,13 +60,13 @@ fun ChannelsScreen() {
     ) {
         Spacer(modifier = Modifier.height(16.dp))
         ChannelsHeader()
-        
+
         Spacer(modifier = Modifier.height(24.dp))
         SearchBar()
 
         Spacer(modifier = Modifier.height(32.dp))
-        SectionHeader(title = "Trending", hasViewAll = true)
-        
+        SectionHeader(title = "Tính năng", hasViewAll = false)
+
         Spacer(modifier = Modifier.height(16.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -82,7 +84,7 @@ fun ChannelsScreen() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Channels",
+                text = "Quick Launch",
                 color = Color.White,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
@@ -97,17 +99,24 @@ fun ChannelsScreen() {
                 Icon(Icons.Filled.FilterList, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
             }
         }
-        
+
         Spacer(modifier = Modifier.height(20.dp))
-        
-        // Channel Grid
-        channelList.chunked(2).forEach { rowItems ->
+
+        // App Grid
+        appList.chunked(2).forEach { rowItems ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                rowItems.forEach { channel ->
-                    ChannelCard(channel, modifier = Modifier.weight(1f))
+                rowItems.forEach { appItem ->
+                    AppCard(
+                        appItem = appItem,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            // Khi click sẽ gọi hàm này và ném Package Name ra ngoài
+                            onLaunchApp(appItem.packageName)
+                        }
+                    )
                 }
                 if (rowItems.size < 2) {
                     Spacer(modifier = Modifier.weight(1f))
@@ -115,7 +124,7 @@ fun ChannelsScreen() {
             }
             Spacer(modifier = Modifier.height(16.dp))
         }
-        
+
         Spacer(modifier = Modifier.height(100.dp))
     }
 }
@@ -128,7 +137,6 @@ fun ChannelsHeader() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Logo Icon
             Box(
                 modifier = Modifier
                     .size(28.dp)
@@ -146,11 +154,10 @@ fun ChannelsHeader() {
                 letterSpacing = 1.sp
             )
         }
-        
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(20.dp))
-            // Profile
             Box(
                 modifier = Modifier
                     .size(38.dp)
@@ -175,7 +182,7 @@ fun SearchBar() {
             Icon(Icons.Filled.Search, contentDescription = null, tint = Color(0xFF333333), modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = "Search for channels, movies, or show",
+                text = "Search apps or commands",
                 color = Color(0xFF555555),
                 fontSize = 15.sp
             )
@@ -218,7 +225,6 @@ fun TrendingCard(item: TrendingItem) {
             .clip(RoundedCornerShape(30.dp))
             .background(Color(0xFF1A1A1A))
     ) {
-        // Mock background image with gradient
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -229,7 +235,7 @@ fun TrendingCard(item: TrendingItem) {
                     )
                 )
         )
-        
+
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -242,7 +248,7 @@ fun TrendingCard(item: TrendingItem) {
                             .background(Color(0xFF3D1E16), RoundedCornerShape(6.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
-                        Text("NEW", color = OrangeAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("HOT", color = OrangeAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                 }
@@ -260,18 +266,19 @@ fun TrendingCard(item: TrendingItem) {
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                item.title, 
-                color = Color.White, 
-                fontSize = 22.sp, 
+                item.title,
+                color = Color.White,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold
             )
         }
     }
 }
 
+// 3. Đổi ChannelCard thành AppCard
 @Composable
-fun ChannelCard(channel: Channel, modifier: Modifier = Modifier) {
-    val isSelected = channel.isSelected
+fun AppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val isSelected = appItem.isSelected
     val backgroundColor = if (isSelected) Color(0xFF151515) else Color(0xFF151515)
     val borderColor = if (isSelected) OrangeAccent.copy(alpha = 0.5f) else Color.Transparent
 
@@ -281,12 +288,11 @@ fun ChannelCard(channel: Channel, modifier: Modifier = Modifier) {
             .clip(RoundedCornerShape(40.dp))
             .background(backgroundColor)
             .then(if (isSelected) Modifier.border(1.5.dp, borderColor, RoundedCornerShape(40.dp)) else Modifier)
-            .clickable { }
+            .clickable { onClick() } // GỌI SỰ KIỆN CLICK Ở ĐÂY
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
         if (isSelected) {
-            // Orange Dot
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -295,16 +301,16 @@ fun ChannelCard(channel: Channel, modifier: Modifier = Modifier) {
                     .background(OrangeAccent, CircleShape)
             )
         }
-        
+
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = channel.name,
+                text = appItem.name,
                 color = Color.White,
-                fontSize = 32.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.sp
             )
-            
+
             if (isSelected) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
@@ -315,7 +321,7 @@ fun ChannelCard(channel: Channel, modifier: Modifier = Modifier) {
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = channel.subtitle,
+                    text = appItem.subtitle,
                     color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -323,7 +329,7 @@ fun ChannelCard(channel: Channel, modifier: Modifier = Modifier) {
             } else {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = channel.subtitle,
+                    text = appItem.subtitle,
                     color = Color.Gray,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium

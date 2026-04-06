@@ -29,6 +29,8 @@ import com.example.remote_tv.ui.components.DeviceSelectionDialog
 import com.example.remote_tv.ui.theme.OrangeAccent
 import com.example.remote_tv.ui.viewmodel.TVViewModel
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 private data class NavTab(val icon: ImageVector, val contentDescription: String)
 
@@ -106,7 +108,12 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
         ) {
             when (uiState.selectedTab) {
                 0 -> MainRemoteTab(viewModel)
-                1 -> ChannelsScreen()
+                1 -> ChannelsScreen(
+                    onLaunchApp = { packageName ->
+                        // Bắn cái packageName (ví dụ: com.google.android.youtube.tv) vào ViewModel
+                        viewModel.launchApp(packageName)
+                    }
+                )
                 2 -> CastScreen(
                     devices = discoveredDevices,
                     connectedDevice = currentDevice,
