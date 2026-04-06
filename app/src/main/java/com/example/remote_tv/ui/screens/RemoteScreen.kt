@@ -35,10 +35,11 @@ import androidx.compose.runtime.setValue
 private data class NavTab(val icon: ImageVector, val contentDescription: String)
 
 private val navTabs = listOf(
-    NavTab(Icons.Filled.Home, "Home"),
-    NavTab(Icons.Filled.Search, "Channels"),
-    NavTab(Icons.Filled.Apps, "Cast"),
-    NavTab(Icons.Filled.Person, "Settings"),
+    NavTab(Icons.Filled.SettingsRemote, "Remote"),
+    NavTab(Icons.Filled.ViewModule, "Channels"),
+    NavTab(Icons.Filled.Cast, "Cast"),
+    NavTab(Icons.Filled.Bookmark, "Watchlist"),
+    NavTab(Icons.Filled.Settings, "Settings"),
 )
 
 @Composable
@@ -138,7 +139,8 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                     onDeviceSelected = viewModel::connectToDevice,
                     onClearDiagnostics = viewModel::clearDiagnosticLogs,
                 )
-                3 -> SettingsScreen(
+                3 -> WatchlistScreen()
+                4 -> SettingsScreen(
                     settingsUiState = settingsUiState,
                     onThemeChanged = { isDarkMode ->
                         viewModel.setThemeMode(
@@ -160,10 +162,10 @@ fun CustomBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(88.dp)
+            .height(80.dp)
             .background(Color(0xFF000000), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             .border(1.dp, Color(0xFF191919), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-            .padding(horizontal = 18.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -178,14 +180,14 @@ fun CustomBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable { onTabSelected(index) }
-                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
                         tab.icon,
                         contentDescription = tab.contentDescription,
                         tint = if (isSelected) OrangeAccent else Color(0xFFADAAAA),
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     if (isSelected) {

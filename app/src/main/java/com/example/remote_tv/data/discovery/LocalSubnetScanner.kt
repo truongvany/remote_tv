@@ -75,6 +75,7 @@ class LocalSubnetScanner(context: Context) {
     }
 
     private fun resolveWifiNetwork(): Network? {
+        @Suppress("DEPRECATION")
         return connectivityManager.allNetworks.firstOrNull { network ->
             val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return@firstOrNull false
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)

@@ -319,6 +319,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun resolveWifiNetwork(connectivityManager: ConnectivityManager): Network? {
+        @Suppress("DEPRECATION")
         return connectivityManager.allNetworks.firstOrNull { network ->
             val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return@firstOrNull false
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
