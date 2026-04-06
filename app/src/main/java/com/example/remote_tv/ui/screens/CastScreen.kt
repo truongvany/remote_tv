@@ -1,6 +1,5 @@
 package com.example.remote_tv.ui.screens
 
-import androidx.animation.core.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,22 +15,37 @@ import androidx.compose.material.icons.automirrored.filled.ScreenShare
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.remote_tv.data.model.TVBrand
+import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.ui.theme.CardBackground
 import com.example.remote_tv.ui.theme.OrangeAccent
 import com.example.remote_tv.ui.theme.TextSecondary
 
 @Composable
-fun CastScreen() {
+fun CastScreen(
+    devices: List<TVDevice>,
+    connectedDevice: TVDevice?,
+    isScanning: Boolean,
+    scanError: String?,
+    hasLocationPermission: Boolean,
+    localIpAddress: String?,
+    localSubnet: String?,
+    onRequestPermission: () -> Unit,
+    onRefreshScan: () -> Unit,
+    onDeviceSelected: (TVDevice) -> Unit,
+) {
+    var showDebugInfo by rememberSaveable { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -57,7 +71,7 @@ fun CastScreen() {
             letterSpacing = 2.sp
         )
         Text(
-            text = "DETECTING NEARBY DISPLAYS...",
+            text = if (isScanning) "DETECTING NEARBY DISPLAYS..." else "SCAN COMPLETE",
             color = Color.Gray,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
@@ -69,20 +83,69 @@ fun CastScreen() {
         // Nearby Devices Section
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("NEARBY DEVICES", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Text("REFRESH", color = OrangeAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text(
+                "NEARBY DEVICES",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = if (showDebugInfo) "HIDE DEBUG" else "DEBUG INFO",
+                color = Color(0xFFFFB38F),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.clickable { showDebugInfo = !showDebugInfo },
+            )
+            Text(
+                "REFRESH",
+                color = OrangeAccent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.clickable { onRefreshScan() }
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        
-        DeviceItem("Living Room TV", "CONNECTED", isConnected = true)
-        Spacer(modifier = Modifier.height(12.dp))
-        DeviceItem("Kitchen Tablet", "AVAILABLE")
-        Spacer(modifier = Modifier.height(12.dp))
-        DeviceItem("Master Bedroom Apple TV", "AVAILABLE")
+
+        if (showDebugInfo) {
+            DebugInfoCard(
+                localIpAddress = localIpAddress,
+                localSubnet = localSubnet,
+                isScanning = isScanning,
+                hasLocationPermission = hasLocationPermission,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        if (!hasLocationPermission) {
+            PermissionRequiredCard(onRequestPermission = onRequestPermission)
+        } else if (scanError != null) {
+            ScanErrorCard(message = scanError, onRetry = onRefreshScan)
+        } else if (devices.isEmpty()) {
+            EmptyDiscoveryCard(isScanning = isScanning)
+        } else {
+            devices.forEachIndexed { index, device ->
+                val isConnected =
+                    connectedDevice?.ipAddress == device.ipAddress &&
+                        connectedDevice?.port == device.port
+                DeviceItem(
+                    device = device,
+                    isConnected = isConnected,
+                    onClick = { onDeviceSelected(device) }
+                )
+
+                if (index < devices.lastIndex) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(40.dp))
 
@@ -161,7 +224,9 @@ fun ScanningAnimationArea() {
 }
 
 @Composable
-fun DeviceItem(name: String, status: String, isConnected: Boolean = false) {
+fun DeviceItem(device: TVDevice, isConnected: Boolean, onClick: () -> Unit) {
+    val status = if (isConnected) "CONNECTED" else "AVAILABLE"
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -169,7 +234,7 @@ fun DeviceItem(name: String, status: String, isConnected: Boolean = false) {
             .clip(RoundedCornerShape(24.dp))
             .background(if (isConnected) Color(0xFF151515) else Color(0xFF0D0D0D))
             .then(if (isConnected) Modifier.border(1.dp, OrangeAccent.copy(alpha = 0.3f), RoundedCornerShape(24.dp)) else Modifier)
-            .clickable { }
+            .clickable { onClick() }
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -180,15 +245,26 @@ fun DeviceItem(name: String, status: String, isConnected: Boolean = false) {
                     .background(Color(0xFF1A1A1A), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Tv, contentDescription = null, tint = if (isConnected) OrangeAccent else Color.Gray)
+                Icon(
+                    imageVector = iconForBrand(device.brand),
+                    contentDescription = null,
+                    tint = if (isConnected) OrangeAccent else Color.Gray
+                )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column {
-                Text(name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(device.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(status, color = if (isConnected) OrangeAccent else Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.weight(1f))
-            Icon(Icons.Filled.SignalCellularAlt, contentDescription = null, tint = if (isConnected) OrangeAccent else Color(0xFF333333))
+            Column(horizontalAlignment = Alignment.End) {
+                Icon(Icons.Filled.SignalCellularAlt, contentDescription = null, tint = if (isConnected) OrangeAccent else Color(0xFF333333))
+                Text(
+                    text = "${device.ipAddress}:${device.port}",
+                    color = Color(0xFF7A7A7A),
+                    fontSize = 10.sp,
+                )
+            }
         }
         
         if (isConnected) {
@@ -201,6 +277,136 @@ fun DeviceItem(name: String, status: String, isConnected: Boolean = false) {
                     .background(OrangeAccent, RoundedCornerShape(2.dp))
             )
         }
+    }
+}
+
+@Composable
+private fun PermissionRequiredCard(onRequestPermission: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xFF121212))
+            .border(1.dp, OrangeAccent.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+            .padding(20.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(
+                text = "Location Permission Required",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Grant location permission to scan devices on your current Wi-Fi network.",
+                color = Color.Gray,
+                fontSize = 12.sp,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onRequestPermission,
+                colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent)
+            ) {
+                Text("Grant Permission", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanErrorCard(message: String, onRetry: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xFF191113))
+            .border(1.dp, Color(0xFF7A2B2B), RoundedCornerShape(24.dp))
+            .padding(20.dp)
+    ) {
+        Column {
+            Text("Scan error", color = Color(0xFFFF8A80), fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(message, color = Color(0xFFE2B9B9), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(onClick = onRetry) {
+                Text("Try again", color = OrangeAccent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyDiscoveryCard(isScanning: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xFF0C0C0C))
+            .border(1.dp, Color(0xFF1F1F1F), RoundedCornerShape(24.dp))
+            .padding(20.dp)
+    ) {
+        Text(
+            text = if (isScanning) {
+                "Scanning IP range in your Wi-Fi subnet..."
+            } else {
+                "No TV found. Tap REFRESH or use manual IP connection."
+            },
+            color = Color(0xFFB3B3B3),
+            fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
+private fun DebugInfoCard(
+    localIpAddress: String?,
+    localSubnet: String?,
+    isScanning: Boolean,
+    hasLocationPermission: Boolean,
+) {
+    val ipText = localIpAddress ?: "Unavailable"
+    val subnetText = localSubnet ?: "Unavailable"
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFF121212))
+            .border(1.dp, Color(0xFF2B2B2B), RoundedCornerShape(20.dp))
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "Debug Network Info",
+                color = Color(0xFFFFB38F),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(text = "Local IP: $ipText", color = Color(0xFFE0E0E0), fontSize = 12.sp)
+            Text(text = "Subnet: $subnetText", color = Color(0xFFE0E0E0), fontSize = 12.sp)
+            Text(
+                text = "Permission: ${if (hasLocationPermission) "Granted" else "Missing"}",
+                color = Color(0xFF9E9E9E),
+                fontSize = 11.sp,
+            )
+            Text(
+                text = "Scan status: ${if (isScanning) "Running" else "Idle"}",
+                color = Color(0xFF9E9E9E),
+                fontSize = 11.sp,
+            )
+        }
+    }
+}
+
+private fun iconForBrand(brand: TVBrand): ImageVector {
+    return when (brand) {
+        TVBrand.ROKU -> Icons.Filled.Tv
+        TVBrand.FIRE_TV -> Icons.Filled.LiveTv
+        TVBrand.SAMSUNG -> Icons.Filled.Tv
+        TVBrand.LG -> Icons.Filled.Tv
+        TVBrand.ANDROID_TV -> Icons.Filled.Cast
+        TVBrand.UNKNOWN -> Icons.Filled.Tv
     }
 }
 

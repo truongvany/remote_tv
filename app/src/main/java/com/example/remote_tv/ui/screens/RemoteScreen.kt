@@ -1,5 +1,8 @@
 package com.example.remote_tv.ui.screens
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,7 +42,25 @@ private val navTabs = listOf(
 fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val discoveredDevices by viewModel.discoveredDevices.collectAsState()
+    val currentDevice by viewModel.currentDevice.collectAsState()
+    val isScanning by viewModel.isScanning.collectAsState()
+    val scanError by viewModel.scanError.collectAsState()
     val settingsUiState by viewModel.settingsUiState.collectAsState()
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = viewModel::onLocationPermissionResult,
+    )
+
+    LaunchedEffect(uiState.selectedTab, uiState.hasLocationPermission) {
+        if (uiState.selectedTab == 2) {
+            if (uiState.hasLocationPermission) {
+                viewModel.onCastTabOpened()
+            } else {
+                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+        }
+    }
 
     if (uiState.showDeviceDialog) {
         DeviceSelectionDialog(
@@ -71,6 +92,26 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
             when (uiState.selectedTab) {
                 0 -> MainRemoteTab(viewModel)
                 1 -> ChannelsScreen()
+                2 -> CastScreen(
+                    devices = discoveredDevices,
+                    connectedDevice = currentDevice,
+                    isScanning = isScanning,
+                    scanError = scanError,
+                    hasLocationPermission = uiState.hasLocationPermission,
+                    localIpAddress = uiState.localIpAddress,
+                    localSubnet = uiState.localSubnet,
+                    onRequestPermission = {
+                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    },
+                    onRefreshScan = {
+                        if (uiState.hasLocationPermission) {
+                            viewModel.refreshCastScan()
+                        } else {
+                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                        }
+                    },
+                    onDeviceSelected = viewModel::connectToDevice,
+                )
                 3 -> SettingsScreen(
                     settingsUiState = settingsUiState,
                     onThemeChanged = { isDarkMode ->

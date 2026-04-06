@@ -34,36 +34,12 @@ class AdbProtocol : TVProtocol {
     }
 
     override suspend fun sendCommand(command: String): Boolean = withContext(Dispatchers.IO) {
-        val keyCode = when (command.uppercase()) {
-            "UP", "MOVE_UP" -> 19
-            "DOWN", "MOVE_DOWN" -> 20
-            "LEFT", "MOVE_LEFT" -> 21
-            "RIGHT", "MOVE_RIGHT" -> 22
-            "OK", "KEY_ENTER", "ENTER" -> 66
-            "KEY_BACK", "BACK" -> 4
-            "KEY_HOME", "HOME" -> 3
-            "KEY_MENU", "MENU" -> 82
-            "KEY_SEARCH", "SEARCH" -> 84
-            "KEY_VOICE", "VOICE" -> 231 // KEYCODE_VOICE_ASSIST
-            "KEY_VOL_UP" -> 24
-            "KEY_VOL_DOWN" -> 25
-            "KEY_MUTE" -> 164
-            "KEY_POWER" -> 26
-            else -> return@withContext false
-        }
-
-        return@withContext try {
-            // Trong thực tế, lệnh ADB sẽ là "input keyevent <keycode>"
-            // Ở đây ta giả định stream đã sẵn sàng nhận lệnh shell hoặc qua ADB protocol
-            Log.d(TAG, "ADB Sending KeyCode: $keyCode for command: $command")
-            true
-        } catch (_: Exception) {
-            false
-        }
+        Log.w(TAG, "ADB command bridge is not implemented yet. command=$command")
+        false
     }
 
     override suspend fun launchApp(appId: String): Boolean = withContext(Dispatchers.IO) {
-        Log.d(TAG, "ADB Launching App: $appId via 'monkey -p $appId 1'")
-        true
+        Log.w(TAG, "ADB app launch bridge is not implemented yet. appId=$appId")
+        false
     }
 }

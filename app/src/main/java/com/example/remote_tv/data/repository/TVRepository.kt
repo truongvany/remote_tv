@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.StateFlow
 interface TVRepository {
     val discoveredDevices: StateFlow<List<TVDevice>>
     val currentDevice: StateFlow<TVDevice?>
+    val isScanning: StateFlow<Boolean>
+    val scanError: StateFlow<String?>
 
     fun startDiscovery()
     fun stopDiscovery()

@@ -34,6 +34,7 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
     }
 
     override suspend fun sendCommand(command: String): Boolean {
+        val activeSession = session ?: return false
         val payload = buildJsonObject {
             put("method", "ms.remote.control")
             putJsonObject("params") {
@@ -44,7 +45,7 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
             }
         }
         return try {
-            session?.send(Frame.Text(payload.toString()))
+            activeSession.send(Frame.Text(payload.toString()))
             true
         } catch (e: Exception) {
             false
@@ -52,6 +53,7 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
     }
 
     override suspend fun launchApp(appId: String): Boolean {
+        val activeSession = session ?: return false
         val payload = buildJsonObject {
             put("method", "ms.channel.emit")
             putJsonObject("params") {
@@ -62,7 +64,7 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
             }
         }
         return try {
-            session?.send(Frame.Text(payload.toString()))
+            activeSession.send(Frame.Text(payload.toString()))
             true
         } catch (e: Exception) {
             false

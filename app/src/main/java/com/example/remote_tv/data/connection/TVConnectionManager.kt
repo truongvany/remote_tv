@@ -3,7 +3,6 @@ package com.example.remote_tv.data.connection
 import android.util.Log
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
-import com.example.remote_tv.data.protocol.AdbProtocol
 import com.example.remote_tv.data.protocol.AndroidTVRemoteProtocol
 import com.example.remote_tv.data.protocol.LGProtocol
 import com.example.remote_tv.data.protocol.SamsungProtocol
@@ -38,9 +37,10 @@ class TVConnectionManager(private val client: HttpClient) {
             Log.d(TAG, "Connecting to ${device.name} at ${device.ipAddress}:${device.port}")
 
             val protocol: TVProtocol? = when (device.brand) {
-                TVBrand.SAMSUNG -> SamsungProtocol(client)
-                TVBrand.LG -> LGProtocol(client)
+                TVBrand.SAMSUNG -> connectSamsungTV(device)
+                TVBrand.LG -> connectLGTV(device)
                 TVBrand.ANDROID_TV -> connectAndroidTV(device)
+                TVBrand.UNKNOWN -> connectByPortHeuristics(device)
                 else -> null
             }
 
@@ -55,19 +55,58 @@ class TVConnectionManager(private val client: HttpClient) {
         }
     }
 
-    private suspend fun connectAndroidTV(device: TVDevice): TVProtocol? {
-        // TODO (Real TV): AndroidTVRemoteProtocol cần TLS + certificate pairing
-        // Hiện tại dùng raw TCP — hoạt động với emulator qua ADB port-forward
-        val remote = AndroidTVRemoteProtocol()
-        val remotePort = if (device.port == 8009) 6466 else device.port
-        if (remote.connect(device.ipAddress, remotePort)) {
-            Log.d(TAG, "Connected via AndroidTVRemoteProtocol at port $remotePort")
-            return remote
+    private suspend fun connectSamsungTV(device: TVDevice): TVProtocol? {
+        val protocol = SamsungProtocol(client)
+        val candidatePorts = listOf(device.port, 8002, 8001, 8009).distinct()
+
+        candidatePorts.forEach { port ->
+            if (protocol.connect(device.ipAddress, port)) {
+                Log.d(TAG, "Connected via SamsungProtocol at port $port")
+                return protocol
+            }
         }
-        // Fallback: ADB port 5555
-        Log.w(TAG, "AndroidTVRemote failed, trying ADB at port 5555...")
-        val adb = AdbProtocol()
-        return if (adb.connect(device.ipAddress, 5555)) adb else null
+
+        return null
+    }
+
+    private suspend fun connectLGTV(device: TVDevice): TVProtocol? {
+        val protocol = LGProtocol(client)
+        val candidatePorts = listOf(device.port, 3000, 8008).distinct()
+
+        candidatePorts.forEach { port ->
+            if (protocol.connect(device.ipAddress, port)) {
+                Log.d(TAG, "Connected via LGProtocol at port $port")
+                return protocol
+            }
+        }
+
+        return null
+    }
+
+    private suspend fun connectAndroidTV(device: TVDevice): TVProtocol? {
+        // TODO (Real TV): AndroidTVRemoteProtocol hoàn chỉnh cần TLS + certificate pairing.
+        // Bản hiện tại chỉ thử handshake TCP ở các cổng Android TV phổ biến.
+        val remote = AndroidTVRemoteProtocol()
+        val candidatePorts = listOf(device.port, 6466, 6467).distinct()
+
+        candidatePorts.forEach { port ->
+            if (remote.connect(device.ipAddress, port)) {
+                Log.d(TAG, "Connected via AndroidTVRemoteProtocol at port $port")
+                return remote
+            }
+        }
+
+        Log.w(TAG, "AndroidTVRemote connection failed for ${device.ipAddress}")
+        return null
+    }
+
+    private suspend fun connectByPortHeuristics(device: TVDevice): TVProtocol? {
+        return when (device.port) {
+            8002, 8001, 8009 -> connectSamsungTV(device)
+            3000, 8008 -> connectLGTV(device)
+            6466 -> connectAndroidTV(device)
+            else -> null
+        }
     }
 
     fun disconnect() {
