@@ -105,9 +105,14 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
 
     private fun schemesForPort(port: Int): List<String> {
         return when (port) {
+            // Port 8001: Samsung TV, WebSocket thuần (không mã hóa)
+            8001 -> listOf("ws")
+            // Port 8002: Samsung TV mới, WSS với self-signed cert
             8002 -> listOf("wss")
+            // Port 8009: Samsung SmartView/Tizen, cũng dùng WSS
             8009 -> listOf("wss", "ws")
-            else -> listOf("ws")
+            // Mặc định thử ws trước, wss sau
+            else -> listOf("ws", "wss")
         }
     }
 }

@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.protocol.AdbProtocol
 import com.example.remote_tv.data.protocol.AndroidTVRemoteProtocol
 import com.example.remote_tv.data.protocol.LGProtocol
 import com.example.remote_tv.data.protocol.SamsungProtocol
@@ -91,8 +92,13 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private suspend fun connectSamsungTV(device: TVDevice): TVProtocol? {
-        val preferredPorts = listOf(8001, 8002, 8009)
-        val candidatePorts = (listOf(device.port) + preferredPorts).distinct()
+        // Bước 1: Thử Samsung WebSocket Remote API (Tizen TV ports)
+        val standardPorts = listOf(8001, 8002)
+        val candidatePorts = if (device.port in standardPorts) {
+            standardPorts
+        } else {
+            (standardPorts + device.port).distinct()
+        }
 
         repeat(ConnectionPolicy.MAX_CONNECT_ROUNDS) { roundIndex ->
             val round = roundIndex + 1
@@ -105,22 +111,24 @@ class TVConnectionManager(private val client: HttpClient) {
                     round = round,
                     connectAction = { protocol.connect(device.ipAddress, port) }
                 )
-
                 if (connected) {
                     Log.d(TAG, "Connected via SamsungProtocol at port $port")
                     return protocol
                 }
             }
-
             if (round < ConnectionPolicy.MAX_CONNECT_ROUNDS) {
                 delay(ConnectionPolicy.backoffMs(round))
             }
         }
 
-        return null
+        // Bước 2: Samsung WebSocket thất bại
+        // Fallback sang ADB (port 5555) — cần timeout lớn hơn do TV có thể hiện dialog xác nhận
+        InAppDiagnostics.warn(TAG, "Samsung WebSocket failed — trying ADB fallback at ${device.ipAddress}:5555")
+        return connectViaAdb(device)
     }
 
     private suspend fun connectLGTV(device: TVDevice): TVProtocol? {
+
         val candidatePorts = listOf(device.port, 3000, 8008).distinct()
 
         repeat(ConnectionPolicy.MAX_CONNECT_ROUNDS) { roundIndex ->
@@ -193,23 +201,48 @@ class TVConnectionManager(private val client: HttpClient) {
             8002, 8001 -> connectSamsungTV(device)
             3000, 8008 -> connectLGTV(device)
             6466, 6467 -> connectAndroidTV(device)
+            5555 -> connectViaAdb(device)  // ADB over TCP
             else -> null
         }
+    }
+
+    private suspend fun connectViaAdb(device: TVDevice): TVProtocol? {
+        val adb = AdbProtocol()
+        currentConnectAttemptCount++
+        val startTime = android.os.SystemClock.elapsedRealtime()
+        InAppDiagnostics.info(
+            TAG,
+            "[ADB_CONNECT] target=${device.ipAddress}:5555 timeout=35000ms (bao gồm thời gian chờ user chấp nhận trên TV)"
+        )
+        // Timeout 35s: 3s TCP connect + 4s initial auth + 30s chờ user bấm OK trên TV
+        val connected = withTimeoutOrNull(35_000L) {
+            adb.connect(device.ipAddress, 5555)
+        } ?: false
+        val elapsed = android.os.SystemClock.elapsedRealtime() - startTime
+        if (connected) {
+            InAppDiagnostics.info(TAG, "[ADB_CONNECT] success elapsed=${elapsed}ms")
+            return adb
+        }
+        InAppDiagnostics.warn(TAG, "[ADB_CONNECT] failed elapsed=${elapsed}ms")
+        return null
     }
 
     private fun buildConnectionError(device: TVDevice): String {
         return when (device.brand) {
             TVBrand.ANDROID_TV -> {
                 if (device.port == 8008 || device.port == 8009) {
-                    "This TV was discovered via Google Cast (port ${device.port}). " +
-                        "Remote approval popup needs Android TV Remote service on port 6466/6467 and TLS pairing, which is not fully implemented yet."
+                    "TV này được phát hiện qua Google Cast (port ${device.port}). " +
+                        "Hãy bật ADB Debugging trên TV: Settings → Hệ thống → Thông tin → bấm Build Number 7 lần → Developer Options → USB Debugging: ON → Network Debugging: ON."
                 } else {
-                    "Could not establish Android TV remote session at ${device.ipAddress}. Ensure TV and phone are on same Wi-Fi and remote pairing is enabled on TV."
+                    "Không kết nối được Android TV tại ${device.ipAddress}. Đảm bảo TV và điện thoại cùng WiFi."
                 }
             }
-            TVBrand.SAMSUNG -> "Could not open Samsung remote channel. Make sure Remote Access is allowed on the TV."
-            TVBrand.LG -> "LG pairing API is not fully implemented yet in this build."
-            else -> "No compatible control protocol for ${device.ipAddress}:${device.port}."
+            TVBrand.SAMSUNG -> {
+                "Không mở được kênh Samsung Remote (port 8001/8002) và ADB (port 5555) đều thất bại. " +
+                "Nếu TV chạy Android TV: Settings → Hệ thống → Thông tin → bấm Build Number 7 lần → Developer Options → USB Debugging + Network Debugging: ON."
+            }
+            TVBrand.LG -> "LG pairing API chưa hoàn chỉnh trong phiên bản này."
+            else -> "Không có protocol phù hợp cho ${device.ipAddress}:${device.port}."
         } + " Attempts=$currentConnectAttemptCount, timeout=${ConnectionPolicy.CONNECT_TIMEOUT_MS}ms."
     }
 

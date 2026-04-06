@@ -25,17 +25,36 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         TopBar(
             deviceName = deviceName,
             onPower = { viewModel.powerToggle() },
-            onSettings = { viewModel.selectTab(3) }
+            onCastClick = { viewModel.selectTab(2) }
         )
 
         NowPlayingCard()
 
+        val uiState by viewModel.uiState.collectAsState()
+
+        ModeSelector(
+            selectedMode = uiState.selectedMode,
+            onModeSelected = { viewModel.selectMode(it) }
+        )
+
         Spacer(modifier = Modifier.height(28.dp))
 
-        DPad(
-            onDirection = { viewModel.sendDirection(it) },
-            onOk = { viewModel.sendOk() }
-        )
+        when (uiState.selectedMode) {
+            0 -> DPad(
+                onDirection = { viewModel.sendDirection(it) },
+                onOk = { viewModel.sendOk() }
+            )
+            1 -> Touchpad(
+                onSwipeUp = { viewModel.sendCommand("UP") },
+                onSwipeDown = { viewModel.sendCommand("DOWN") },
+                onSwipeLeft = { viewModel.sendCommand("LEFT") },
+                onSwipeRight = { viewModel.sendCommand("RIGHT") },
+                onTap = { viewModel.sendOk() }
+            )
+            2 -> KeyboardInput(
+                onSendText = { text -> viewModel.sendCommand("TEXT:$text") }
+            )
+        }
 
         Spacer(modifier = Modifier.height(28.dp))
 

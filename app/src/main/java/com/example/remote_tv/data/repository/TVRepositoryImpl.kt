@@ -1,24 +1,57 @@
 package com.example.remote_tv.data.repository
 
 import android.content.Context
+import com.example.remote_tv.data.AdbKeyManager
 import com.example.remote_tv.data.connection.TVConnectionManager
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.discovery.TVDiscoveryService
 import com.example.remote_tv.data.model.TVDevice
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.StateFlow
+import okhttp3.OkHttpClient
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 class TVRepositoryImpl(context: Context) : TVRepository {
 
-    private val httpClient = HttpClient {
+    /**
+     * TrustManager chấp nhận mọi certificate (self-signed) — dùng cho
+     * kết nối WSS với Samsung TV trên mạng LAN nội bộ.
+     * KHÔNG dùng cho các request internet công khai.
+     */
+    private val unsafeTrustManager = object : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+    }
+
+    private val unsafeSSLContext = SSLContext.getInstance("TLS").apply {
+        init(null, arrayOf<TrustManager>(unsafeTrustManager), SecureRandom())
+    }
+
+    private val unsafeOkHttpClient = OkHttpClient.Builder()
+        .sslSocketFactory(unsafeSSLContext.socketFactory, unsafeTrustManager)
+        .hostnameVerifier { _, _ -> true }
+        .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
+    private val httpClient = HttpClient(OkHttp) {
+        engine {
+            preconfigured = unsafeOkHttpClient
+        }
         install(HttpTimeout) {
-            connectTimeoutMillis = 1_200
-            requestTimeoutMillis = 3_000
-            socketTimeoutMillis = 3_000
+            connectTimeoutMillis = 2_000
+            requestTimeoutMillis = 5_000
+            socketTimeoutMillis = 5_000
         }
         install(WebSockets)
         install(ContentNegotiation) { json() }
@@ -26,6 +59,11 @@ class TVRepositoryImpl(context: Context) : TVRepository {
 
     private val discoveryService = TVDiscoveryService(context)
     private val connectionManager = TVConnectionManager(httpClient)
+
+    init {
+        // Khởi tạo RSA keypair dùng cho ADB authentication
+        AdbKeyManager.init(context)
+    }
 
     override val discoveredDevices: StateFlow<List<TVDevice>> = discoveryService.discoveredDevices
     override val currentDevice: StateFlow<TVDevice?> = connectionManager.currentDevice
