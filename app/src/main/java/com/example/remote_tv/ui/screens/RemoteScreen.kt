@@ -46,6 +46,7 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     val isScanning by viewModel.isScanning.collectAsState()
     val scanError by viewModel.scanError.collectAsState()
     val connectionError by viewModel.connectionError.collectAsState()
+    val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val settingsUiState by viewModel.settingsUiState.collectAsState()
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -102,6 +103,7 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                     hasLocationPermission = uiState.hasLocationPermission,
                     localIpAddress = uiState.localIpAddress,
                     localSubnet = uiState.localSubnet,
+                    diagnosticLogs = diagnosticLogs,
                     onRequestPermission = {
                         locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                     },
@@ -113,6 +115,7 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                         }
                     },
                     onDeviceSelected = viewModel::connectToDevice,
+                    onClearDiagnostics = viewModel::clearDiagnosticLogs,
                 )
                 3 -> SettingsScreen(
                     settingsUiState = settingsUiState,

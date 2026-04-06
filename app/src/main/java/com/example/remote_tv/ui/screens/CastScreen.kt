@@ -41,9 +41,11 @@ fun CastScreen(
     hasLocationPermission: Boolean,
     localIpAddress: String?,
     localSubnet: String?,
+    diagnosticLogs: List<String>,
     onRequestPermission: () -> Unit,
     onRefreshScan: () -> Unit,
     onDeviceSelected: (TVDevice) -> Unit,
+    onClearDiagnostics: () -> Unit,
 ) {
     var showDebugInfo by rememberSaveable { mutableStateOf(false) }
 
@@ -121,6 +123,8 @@ fun CastScreen(
                 localSubnet = localSubnet,
                 isScanning = isScanning,
                 hasLocationPermission = hasLocationPermission,
+                logs = diagnosticLogs,
+                onClearLogs = onClearDiagnostics,
             )
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -397,6 +401,8 @@ private fun DebugInfoCard(
     localSubnet: String?,
     isScanning: Boolean,
     hasLocationPermission: Boolean,
+    logs: List<String>,
+    onClearLogs: () -> Unit,
 ) {
     val ipText = localIpAddress ?: "Unavailable"
     val subnetText = localSubnet ?: "Unavailable"
@@ -410,12 +416,21 @@ private fun DebugInfoCard(
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "Debug Network Info",
-                color = Color(0xFFFFB38F),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Debug Network Info",
+                    color = Color(0xFFFFB38F),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                TextButton(onClick = onClearLogs) {
+                    Text("Clear Logs", color = Color(0xFFFFB38F), fontSize = 11.sp)
+                }
+            }
             Text(text = "Local IP: $ipText", color = Color(0xFFE0E0E0), fontSize = 12.sp)
             Text(text = "Subnet: $subnetText", color = Color(0xFFE0E0E0), fontSize = 12.sp)
             Text(
@@ -428,6 +443,31 @@ private fun DebugInfoCard(
                 color = Color(0xFF9E9E9E),
                 fontSize = 11.sp,
             )
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "In-app Logs",
+                color = Color(0xFFFFB38F),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            if (logs.isEmpty()) {
+                Text(
+                    text = "No logs yet. Tap a TV or press remote buttons to capture events.",
+                    color = Color(0xFF8E8E8E),
+                    fontSize = 11.sp,
+                )
+            } else {
+                logs.takeLast(12).forEach { line ->
+                    Text(
+                        text = line,
+                        color = Color(0xFFB9B9B9),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                    )
+                }
+            }
         }
     }
 }

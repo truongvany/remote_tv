@@ -32,6 +32,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     val isScanning: StateFlow<Boolean> = repository.isScanning
     val scanError: StateFlow<String?> = repository.scanError
     val connectionError: StateFlow<String?> = repository.connectionError
+    val diagnosticLogs: StateFlow<List<String>> = repository.diagnosticLogs
 
     private val _uiState = MutableStateFlow(RemoteUiState())
     val uiState: StateFlow<RemoteUiState> = _uiState.asStateFlow()
@@ -108,6 +109,10 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     fun connectToDevice(device: TVDevice) {
         repository.connectToDevice(device)
         hideDeviceDialog()
+    }
+
+    fun clearDiagnosticLogs() {
+        repository.clearDiagnosticLogs()
     }
 
     fun disconnect() = repository.disconnect()

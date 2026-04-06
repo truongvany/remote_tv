@@ -2,6 +2,7 @@ package com.example.remote_tv.data.repository
 
 import android.content.Context
 import com.example.remote_tv.data.connection.TVConnectionManager
+import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.discovery.TVDiscoveryService
 import com.example.remote_tv.data.model.TVDevice
 import io.ktor.client.HttpClient
@@ -25,12 +26,17 @@ class TVRepositoryImpl(context: Context) : TVRepository {
     override val isScanning: StateFlow<Boolean> = discoveryService.isScanning
     override val scanError: StateFlow<String?> = discoveryService.scanError
     override val connectionError: StateFlow<String?> = connectionManager.connectionError
+    override val diagnosticLogs: StateFlow<List<String>> = InAppDiagnostics.logs
 
     override fun startDiscovery() = discoveryService.startDiscovery()
     override fun stopDiscovery() = discoveryService.stopDiscovery()
 
     override fun connectToDevice(device: TVDevice) {
         connectionManager.connect(device)
+    }
+
+    override fun clearDiagnosticLogs() {
+        InAppDiagnostics.clear()
     }
 
     override fun disconnect() {

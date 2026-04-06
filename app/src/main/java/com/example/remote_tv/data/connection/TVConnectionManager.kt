@@ -1,6 +1,7 @@
 package com.example.remote_tv.data.connection
 
 import android.util.Log
+import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.data.protocol.AndroidTVRemoteProtocol
@@ -39,6 +40,10 @@ class TVConnectionManager(private val client: HttpClient) {
             _connectionError.value = null
 
             Log.d(TAG, "Connecting to ${device.name} at ${device.ipAddress}:${device.port}")
+            InAppDiagnostics.info(
+                TAG,
+                "Connect request: ${device.name} (${device.brand}) ${device.ipAddress}:${device.port}",
+            )
 
             val protocol: TVProtocol? = when (device.brand) {
                 TVBrand.SAMSUNG -> connectSamsungTV(device)
@@ -52,10 +57,12 @@ class TVConnectionManager(private val client: HttpClient) {
                 activeProtocol = protocol
                 _currentDevice.value = device.copy(isConnected = true)
                 Log.d(TAG, "SUCCESS: Connected to ${device.name}")
+                InAppDiagnostics.info(TAG, "Connected: ${device.name} at ${device.ipAddress}:${device.port}")
             } else {
                 Log.e(TAG, "FAILED: Could not connect to ${device.ipAddress}")
                 _currentDevice.value = null
                 _connectionError.value = buildConnectionError(device)
+                InAppDiagnostics.error(TAG, "Connect failed: ${device.name} ${device.ipAddress}:${device.port}")
             }
         }
     }
@@ -65,8 +72,10 @@ class TVConnectionManager(private val client: HttpClient) {
         val candidatePorts = listOf(device.port, 8002, 8001, 8009).distinct()
 
         candidatePorts.forEach { port ->
+            InAppDiagnostics.info(TAG, "Trying Samsung channel ${device.ipAddress}:$port")
             if (protocol.connect(device.ipAddress, port)) {
                 Log.d(TAG, "Connected via SamsungProtocol at port $port")
+                InAppDiagnostics.info(TAG, "Samsung channel opened on port $port")
                 return protocol
             }
         }
@@ -79,8 +88,10 @@ class TVConnectionManager(private val client: HttpClient) {
         val candidatePorts = listOf(device.port, 3000, 8008).distinct()
 
         candidatePorts.forEach { port ->
+            InAppDiagnostics.info(TAG, "Trying LG channel ${device.ipAddress}:$port")
             if (protocol.connect(device.ipAddress, port)) {
                 Log.d(TAG, "Connected via LGProtocol at port $port")
+                InAppDiagnostics.info(TAG, "LG channel opened on port $port")
                 return protocol
             }
         }
@@ -101,13 +112,16 @@ class TVConnectionManager(private val client: HttpClient) {
         }.distinct()
 
         candidatePorts.forEach { port ->
+            InAppDiagnostics.info(TAG, "Trying AndroidTV remote ${device.ipAddress}:$port")
             if (remote.connect(device.ipAddress, port)) {
                 Log.d(TAG, "Connected via AndroidTVRemoteProtocol at port $port")
+                InAppDiagnostics.info(TAG, "AndroidTV remote socket connected on port $port")
                 return remote
             }
         }
 
         Log.w(TAG, "AndroidTVRemote connection failed for ${device.ipAddress}")
+        InAppDiagnostics.warn(TAG, "AndroidTV remote connect failed for ${device.ipAddress}")
         return null
     }
 
@@ -142,6 +156,7 @@ class TVConnectionManager(private val client: HttpClient) {
             activeProtocol = null
             _currentDevice.value = null
             _connectionError.value = null
+            InAppDiagnostics.info(TAG, "Disconnected active protocol")
         }
     }
 
@@ -159,12 +174,19 @@ class TVConnectionManager(private val client: HttpClient) {
 
     suspend fun sendCommand(command: String): Boolean {
         val protocol = activeProtocol
+        InAppDiagnostics.info(TAG, "Send command: $command")
         return if (protocol != null) {
             val success = protocol.sendCommand(command)
-            if (!success) Log.e(TAG, "Command failed: $command")
+            if (!success) {
+                Log.e(TAG, "Command failed: $command")
+                InAppDiagnostics.error(TAG, "Command failed: $command")
+            } else {
+                InAppDiagnostics.info(TAG, "Command sent: $command")
+            }
             success
         } else {
             Log.e(TAG, "No active connection to send command: $command")
+            InAppDiagnostics.error(TAG, "Command blocked (no active connection): $command")
             false
         }
     }

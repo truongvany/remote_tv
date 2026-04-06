@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
+import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
 import kotlinx.coroutines.CancellationException
@@ -46,6 +47,7 @@ class TVDiscoveryService(context: Context) {
         _discoveredDevices.value = emptyList()
         _scanError.value = null
         _isScanning.value = true
+        InAppDiagnostics.info(TAG, "Start discovery: NSD + subnet scan")
 
         castListener = buildListener("_googlecast._tcp")
         remoteListener = buildListener("_androidtvremote2._tcp")
@@ -56,33 +58,39 @@ class TVDiscoveryService(context: Context) {
             nsdManager.discoverServices("_googlecast._tcp", NsdManager.PROTOCOL_DNS_SD, castListener)
         } catch (e: Exception) {
             Log.e(TAG, "Cast discovery error: ${e.message}")
+            InAppDiagnostics.error(TAG, "Cast NSD error: ${e.message}")
         }
         try {
             nsdManager.discoverServices("_androidtvremote2._tcp", NsdManager.PROTOCOL_DNS_SD, remoteListener)
         } catch (e: Exception) {
             Log.e(TAG, "AndroidTVRemote discovery error: ${e.message}")
+            InAppDiagnostics.error(TAG, "AndroidTV NSD error: ${e.message}")
         }
         try {
             nsdManager.discoverServices("_samsungmsf._tcp", NsdManager.PROTOCOL_DNS_SD, samsungListener)
         } catch (e: Exception) {
             Log.e(TAG, "Samsung discovery error: ${e.message}")
+            InAppDiagnostics.error(TAG, "Samsung NSD error: ${e.message}")
         }
         try {
             nsdManager.discoverServices("_roku-ecp._tcp", NsdManager.PROTOCOL_DNS_SD, rokuListener)
         } catch (e: Exception) {
             Log.e(TAG, "Roku discovery error: ${e.message}")
+            InAppDiagnostics.error(TAG, "Roku NSD error: ${e.message}")
         }
 
         deepScanJob = discoveryScope.launch {
             try {
                 val scannedDevices = subnetScanner.scan(defaultScanPorts)
                 scannedDevices.forEach { updateDeviceList(it) }
+                InAppDiagnostics.info(TAG, "Subnet scan finished. devices=${scannedDevices.size}")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
                 val message = "Subnet scan failed: ${e.message ?: "unknown"}"
                 Log.e(TAG, message, e)
                 _scanError.value = message
+                InAppDiagnostics.error(TAG, message)
             } finally {
                 _isScanning.value = false
             }
@@ -101,12 +109,14 @@ class TVDiscoveryService(context: Context) {
         samsungListener = null
         rokuListener = null
         _isScanning.value = false
+        InAppDiagnostics.info(TAG, "Stop discovery")
     }
 
     private fun buildListener(@Suppress("UNUSED_PARAMETER") serviceType: String): NsdManager.DiscoveryListener {
         return object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(regType: String) {
                 Log.d(TAG, "Discovery started: $regType")
+                InAppDiagnostics.info(TAG, "NSD started: $regType")
             }
 
             override fun onServiceFound(service: NsdServiceInfo) {
@@ -135,6 +145,7 @@ class TVDiscoveryService(context: Context) {
                             brand = brand
                         )
                         Log.d(TAG, "Resolved: $name [$brand] at $host:${serviceInfo.port}")
+                        InAppDiagnostics.info(TAG, "Resolved: $name [$brand] $host:${serviceInfo.port}")
                         updateDeviceList(device)
                     }
                 })
@@ -142,12 +153,14 @@ class TVDiscoveryService(context: Context) {
 
             override fun onServiceLost(service: NsdServiceInfo) {
                 Log.w(TAG, "Service lost: ${service.serviceName}")
+                InAppDiagnostics.warn(TAG, "Service lost: ${service.serviceName}")
                 _discoveredDevices.value = _discoveredDevices.value.filter { it.id != service.serviceName }
             }
 
             override fun onDiscoveryStopped(serviceType: String) {}
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 _scanError.value = "Discovery failed for $serviceType (error $errorCode)"
+                InAppDiagnostics.error(TAG, "NSD failed: $serviceType error=$errorCode")
                 try { nsdManager.stopServiceDiscovery(this) } catch (_: Exception) {}
             }
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {

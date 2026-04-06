@@ -9,10 +9,12 @@ interface TVRepository {
     val isScanning: StateFlow<Boolean>
     val scanError: StateFlow<String?>
     val connectionError: StateFlow<String?>
+    val diagnosticLogs: StateFlow<List<String>>
 
     fun startDiscovery()
     fun stopDiscovery()
     fun connectToDevice(device: TVDevice)
+    fun clearDiagnosticLogs()
     fun disconnect()
     fun scheduleReconnect()
     suspend fun sendCommand(command: String): Boolean
