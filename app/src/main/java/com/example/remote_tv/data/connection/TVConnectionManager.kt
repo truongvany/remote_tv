@@ -91,7 +91,8 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private suspend fun connectSamsungTV(device: TVDevice): TVProtocol? {
-        val candidatePorts = listOf(device.port, 8002, 8001, 8009).distinct()
+        val preferredPorts = listOf(8001, 8002, 8009)
+        val candidatePorts = (listOf(device.port) + preferredPorts).distinct()
 
         repeat(ConnectionPolicy.MAX_CONNECT_ROUNDS) { roundIndex ->
             val round = roundIndex + 1

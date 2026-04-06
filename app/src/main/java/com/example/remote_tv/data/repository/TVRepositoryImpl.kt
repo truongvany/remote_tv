@@ -7,6 +7,7 @@ import com.example.remote_tv.data.discovery.TVDiscoveryService
 import com.example.remote_tv.data.model.TVDevice
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,11 @@ import kotlinx.coroutines.flow.StateFlow
 class TVRepositoryImpl(context: Context) : TVRepository {
 
     private val httpClient = HttpClient {
+        install(HttpTimeout) {
+            connectTimeoutMillis = 1_200
+            requestTimeoutMillis = 3_000
+            socketTimeoutMillis = 3_000
+        }
         install(WebSockets)
         install(ContentNegotiation) { json() }
     }
