@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
@@ -37,6 +38,7 @@ val defaultAppShortcuts = listOf(
 @Composable
 fun QuickLaunch(
     apps: List<AppShortcut> = defaultAppShortcuts,
+    isEnabled: Boolean = true,
     onLaunchApp: (String) -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -69,6 +71,7 @@ fun QuickLaunch(
             apps.forEach { app ->
                 AppCard(
                     app = app,
+                    isEnabled = isEnabled,
                     modifier = Modifier.weight(1f),
                     onClick = { onLaunchApp(app.packageId) }
                 )
@@ -80,16 +83,18 @@ fun QuickLaunch(
 @Composable
 fun AppCard(
     app: AppShortcut,
+    isEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
     Box(
         modifier = modifier
+            .alpha(if (isEnabled) 1f else 0.45f)
             .height(74.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(ButtonBackground)
             .border(1.dp, Color(0xFF252525), RoundedCornerShape(18.dp))
-            .clickable { onClick() },
+            .clickable(enabled = isEnabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Box(

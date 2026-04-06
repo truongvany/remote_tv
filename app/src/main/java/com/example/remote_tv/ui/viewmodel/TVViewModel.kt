@@ -5,12 +5,16 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
 import java.net.Inet4Address
 import android.util.Patterns
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.remote_tv.data.model.AppLaunchStatus
 import com.example.remote_tv.data.model.AppThemeMode
+import com.example.remote_tv.data.model.PlaybackState
 import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.data.preferences.AppPreferencesRepository
 import com.example.remote_tv.data.repository.TVRepository
@@ -33,6 +37,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     val isScanning: StateFlow<Boolean> = repository.isScanning
     val scanError: StateFlow<String?> = repository.scanError
     val connectionError: StateFlow<String?> = repository.connectionError
+    val playbackState: StateFlow<PlaybackState> = repository.playbackState
     val diagnosticLogs: StateFlow<List<String>> = repository.diagnosticLogs
 
     private val _uiState = MutableStateFlow(RemoteUiState())
@@ -50,6 +55,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         observeSettings()
+        observePlaybackVisibility()
     }
 
     private fun observeSettings() {
@@ -66,6 +72,18 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
                         userProfile = userProfile,
                         isProfileSaving = false
                     )
+                }
+            }
+        }
+    }
+
+    private fun observePlaybackVisibility() {
+        viewModelScope.launch {
+            combine(currentDevice, playbackState) { device, state ->
+                device != null && state == PlaybackState.PLAYING
+            }.collect { shouldShowNowPlaying ->
+                _uiState.update { current ->
+                    current.copy(showNowPlaying = shouldShowNowPlaying)
                 }
             }
         }
@@ -119,7 +137,14 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnect() = repository.disconnect()
 
     fun sendCommand(command: String) {
-        viewModelScope.launch { repository.sendCommand(command) }
+        viewModelScope.launch {
+            val success = repository.sendCommand(command)
+            if (!success && command.startsWith("TEXT:")) {
+                _uiState.update {
+                    it.copy(actionMessage = "Cannot send text on current TV connection")
+                }
+            }
+        }
     }
 
     fun sendDirection(direction: String) = sendCommand(direction)
@@ -133,7 +158,22 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     fun menu()          = sendCommand("KEY_MENU")
 
     fun launchApp(appId: String) {
-        viewModelScope.launch { repository.launchApp(appId) }
+        viewModelScope.launch {
+            val result = repository.launchApp(appId)
+            if (!result.isSuccess) {
+                val message = when (result.status) {
+                    AppLaunchStatus.NO_SESSION -> "Connect TV before using Quick Launch"
+                    AppLaunchStatus.UNSUPPORTED -> "Quick Launch is not supported on this connection"
+                    AppLaunchStatus.FAILED -> "App launch failed: ${result.resolvedAppId}"
+                    AppLaunchStatus.SUCCESS -> null
+                }
+                _uiState.update { it.copy(actionMessage = message) }
+            }
+        }
+    }
+
+    fun consumeActionMessage() {
+        _uiState.update { it.copy(actionMessage = null) }
     }
 
     fun setThemeMode(themeMode: AppThemeMode) {
@@ -205,7 +245,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     private fun resolveLocalIpv4Address(): String? {
         val cm = getApplication<Application>()
             .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return null
+        val network = resolveWifiNetwork(cm) ?: return null
         val linkProperties = cm.getLinkProperties(network) ?: return null
         return linkProperties.linkAddresses
             .firstOrNull { address ->
@@ -219,7 +259,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     private fun resolveLocalSubnet(): String? {
         val cm = getApplication<Application>()
             .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return null
+        val network = resolveWifiNetwork(cm) ?: return null
         val linkProperties: LinkProperties = cm.getLinkProperties(network) ?: return null
 
         val linkAddress = linkProperties.linkAddresses.firstOrNull { address ->
@@ -230,5 +270,12 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         val hostAddress = linkAddress.address.hostAddress ?: return null
         val prefixLength = linkAddress.prefixLength
         return "$hostAddress/$prefixLength"
+    }
+
+    private fun resolveWifiNetwork(connectivityManager: ConnectivityManager): Network? {
+        return connectivityManager.allNetworks.firstOrNull { network ->
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return@firstOrNull false
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        }
     }
 }

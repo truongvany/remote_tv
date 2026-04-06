@@ -3,8 +3,10 @@ package com.example.remote_tv.data.connection
 import android.os.SystemClock
 import android.util.Log
 import com.example.remote_tv.data.debug.InAppDiagnostics
+import com.example.remote_tv.data.model.AppLaunchResult
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.model.PlaybackState
 import com.example.remote_tv.data.protocol.AdbProtocol
 import com.example.remote_tv.data.protocol.AndroidTVRemoteProtocol
 import com.example.remote_tv.data.protocol.LGProtocol
@@ -35,6 +37,9 @@ class TVConnectionManager(private val client: HttpClient) {
     private val _connectingDeviceKey = MutableStateFlow<String?>(null)
     val connectingDeviceKey: StateFlow<String?> = _connectingDeviceKey.asStateFlow()
 
+    private val _playbackState = MutableStateFlow(PlaybackState.IDLE)
+    val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
+
     private var activeProtocol: TVProtocol? = null
     private var lastConnectedDevice: TVDevice? = null
     private var connectJob: Job? = null
@@ -55,6 +60,7 @@ class TVConnectionManager(private val client: HttpClient) {
             _currentDevice.value = null
             _connectionError.value = null
             _connectingDeviceKey.value = targetKey
+            _playbackState.value = PlaybackState.IDLE
             currentConnectAttemptCount = 0
 
             Log.d(TAG, "Connecting to ${device.name} at ${device.ipAddress}:${device.port}")
@@ -75,11 +81,13 @@ class TVConnectionManager(private val client: HttpClient) {
                 if (protocol != null) {
                     activeProtocol = protocol
                     _currentDevice.value = device.copy(isConnected = true)
+                    _playbackState.value = PlaybackState.IDLE
                     Log.d(TAG, "SUCCESS: Connected to ${device.name}")
                     InAppDiagnostics.info(TAG, "[CONNECT_SUCCESS] ${device.name} ${device.ipAddress}:${device.port}")
                 } else {
                     Log.e(TAG, "FAILED: Could not connect to ${device.ipAddress}")
                     _currentDevice.value = null
+                    _playbackState.value = PlaybackState.IDLE
                     _connectionError.value = buildConnectionError(device)
                     InAppDiagnostics.error(TAG, "[CONNECT_FAIL] ${device.name} ${device.ipAddress}:${device.port}")
                 }
@@ -192,8 +200,8 @@ class TVConnectionManager(private val client: HttpClient) {
         }
 
         Log.w(TAG, "AndroidTVRemote connection failed for ${device.ipAddress}")
-        InAppDiagnostics.warn(TAG, "AndroidTV remote connect failed for ${device.ipAddress}")
-        return null
+        InAppDiagnostics.warn(TAG, "AndroidTV remote connect failed for ${device.ipAddress}. Trying ADB fallback...")
+        return connectViaAdb(device)
     }
 
     private suspend fun connectByPortHeuristics(device: TVDevice): TVProtocol? {
@@ -285,6 +293,7 @@ class TVConnectionManager(private val client: HttpClient) {
             activeProtocol?.disconnect()
             activeProtocol = null
             _currentDevice.value = null
+            _playbackState.value = PlaybackState.IDLE
             _connectionError.value = null
             _connectingDeviceKey.value = null
             InAppDiagnostics.info(TAG, "Disconnected active protocol")
@@ -306,14 +315,38 @@ class TVConnectionManager(private val client: HttpClient) {
     suspend fun sendCommand(command: String): Boolean {
         val protocol = activeProtocol
         InAppDiagnostics.info(TAG, "[COMMAND_SEND] request=$command")
+
+        if (command.startsWith("TEXT:")) {
+            InAppDiagnostics.info(TAG, "[TEXT_SEND] request=${command.removePrefix("TEXT:")}")
+        }
+
         return if (protocol != null) {
-            val success = protocol.sendCommand(command)
+            val candidates = resolveCommandCandidates(command, protocol)
+            var success = false
+
+            for (candidate in candidates) {
+                val sent = protocol.sendCommand(candidate)
+                InAppDiagnostics.info(TAG, "[COMMAND_SEND] try=$candidate result=$sent")
+                if (sent) {
+                    success = true
+                    break
+                }
+            }
+
             if (!success) {
                 Log.e(TAG, "Command failed: $command")
                 InAppDiagnostics.error(TAG, "[COMMAND_SEND] failed=$command")
+                if (command.startsWith("TEXT:")) {
+                    InAppDiagnostics.error(TAG, "[TEXT_SEND] failed protocol=${protocol.javaClass.simpleName}")
+                }
             } else {
                 InAppDiagnostics.info(TAG, "[COMMAND_SEND] success=$command")
+                if (command.startsWith("TEXT:")) {
+                    InAppDiagnostics.info(TAG, "[TEXT_SEND] success protocol=${protocol.javaClass.simpleName}")
+                }
+                updatePlaybackStateFromCommand(command)
             }
+
             success
         } else {
             Log.e(TAG, "No active connection to send command: $command")
@@ -324,8 +357,165 @@ class TVConnectionManager(private val client: HttpClient) {
 
     private fun TVDevice.toConnectionKey(): String = "$ipAddress:$port"
 
-    suspend fun launchApp(appId: String): Boolean {
-        return activeProtocol?.launchApp(appId) ?: false
+    suspend fun launchApp(appId: String): AppLaunchResult {
+        val protocol = activeProtocol
+        val device = _currentDevice.value
+
+        if (protocol == null || device == null) {
+            InAppDiagnostics.error(TAG, "[APP_LAUNCH] blocked_no_session appId=$appId")
+            return AppLaunchResult.noSession(appId)
+        }
+
+        val mappedAppId = mapAppIdForDevice(appId, device)
+        InAppDiagnostics.info(TAG, "[APP_LAUNCH] request=$appId mapped=$mappedAppId brand=${device.brand}")
+        val directSuccess = protocol.launchApp(mappedAppId)
+
+        if (directSuccess) {
+            InAppDiagnostics.info(TAG, "[APP_LAUNCH] success appId=$mappedAppId")
+            return AppLaunchResult.success(appId, mappedAppId)
+        }
+
+        if (device.brand == TVBrand.ANDROID_TV && protocol !is AdbProtocol) {
+            val adbSuccess = launchAndroidTvViaAdb(device, appId)
+            if (adbSuccess) {
+                InAppDiagnostics.info(TAG, "[APP_LAUNCH] success via_adb appId=$appId")
+                return AppLaunchResult.success(appId, appId)
+            }
+        }
+
+        val searchFallbackSuccess = launchBySearchFallback(appId)
+        if (searchFallbackSuccess) {
+            InAppDiagnostics.info(TAG, "[APP_LAUNCH] success via_search_fallback appId=$appId")
+            return AppLaunchResult.success(appId, appId)
+        }
+
+        val unsupported = protocol is AndroidTVRemoteProtocol || protocol is LGProtocol
+        if (unsupported) {
+            InAppDiagnostics.error(TAG, "[APP_LAUNCH] unsupported appId=$mappedAppId protocol=${protocol.javaClass.simpleName}")
+            return AppLaunchResult.unsupported(
+                requestedAppId = appId,
+                resolvedAppId = mappedAppId,
+                message = "Current protocol does not support app launch yet",
+            )
+        }
+
+        InAppDiagnostics.error(TAG, "[APP_LAUNCH] failed appId=$mappedAppId brand=${device.brand}")
+        return AppLaunchResult.failed(
+            requestedAppId = appId,
+            resolvedAppId = mappedAppId,
+            message = "TV rejected app launch request",
+        )
+    }
+
+    private suspend fun launchAndroidTvViaAdb(device: TVDevice, appId: String): Boolean {
+        val adb = AdbProtocol()
+        return try {
+            val connected = withTimeoutOrNull(10_000L) {
+                adb.connect(device.ipAddress, 5555)
+            } ?: false
+
+            if (!connected) {
+                InAppDiagnostics.warn(TAG, "[APP_LAUNCH] adb_fallback_connect_failed target=${device.ipAddress}:5555")
+                return false
+            }
+
+            adb.launchApp(appId)
+        } catch (e: Exception) {
+            InAppDiagnostics.error(TAG, "[APP_LAUNCH] adb_fallback_error=${e.message}")
+            false
+        } finally {
+            runCatching { adb.disconnect() }
+        }
+    }
+
+    private suspend fun launchBySearchFallback(appId: String): Boolean {
+        val appQuery = appSearchQuery(appId) ?: return false
+
+        InAppDiagnostics.warn(TAG, "[APP_LAUNCH] fallback_search start query=$appQuery")
+
+        // Try opening search and typing app name when direct app launch is unavailable.
+        sendCommand("KEY_HOME")
+        delay(140)
+
+        val openSearch = sendCommand("KEY_SEARCH")
+        if (!openSearch) {
+            InAppDiagnostics.warn(TAG, "[APP_LAUNCH] fallback_search failed open_search")
+            return false
+        }
+
+        delay(120)
+        val sendText = sendCommand("TEXT:$appQuery")
+        delay(120)
+        val submit = sendCommand("KEY_ENTER")
+
+        val success = sendText && submit
+        if (!success) {
+            InAppDiagnostics.warn(TAG, "[APP_LAUNCH] fallback_search failed sendText=$sendText submit=$submit")
+        }
+        return success
+    }
+
+    private fun appSearchQuery(appId: String): String? {
+        return when (appId) {
+            "com.netflix.ninja" -> "Netflix"
+            "com.google.android.youtube.tv" -> "YouTube"
+            "com.disney.disneyplus" -> "Disney Plus"
+            else -> null
+        }
+    }
+
+    private fun resolveCommandCandidates(command: String, protocol: TVProtocol): List<String> {
+        if (protocol is SamsungProtocol) {
+            return when (command) {
+                "KEY_VOICE" -> listOf("KEY_BT_VOICE", "KEY_VOICE", "KEY_MIC")
+                "KEY_SEARCH" -> listOf("KEY_SEARCH", "KEY_FINDER")
+                else -> listOf(command)
+            }
+        }
+
+        if (protocol is AndroidTVRemoteProtocol || protocol is AdbProtocol) {
+            return when (command) {
+                "KEY_VOICE" -> listOf("KEY_VOICE", "VOICE")
+                "KEY_SEARCH" -> listOf("KEY_SEARCH", "SEARCH")
+                else -> listOf(command)
+            }
+        }
+
+        return listOf(command)
+    }
+
+    private fun mapAppIdForDevice(appId: String, device: TVDevice): String {
+        return when (device.brand) {
+            TVBrand.SAMSUNG -> when (appId) {
+                "com.netflix.ninja" -> "11101200001"
+                "com.google.android.youtube.tv" -> "111299001912"
+                "com.disney.disneyplus" -> "3201901017640"
+                else -> appId
+            }
+
+            TVBrand.LG -> when (appId) {
+                "com.netflix.ninja" -> "netflix"
+                "com.google.android.youtube.tv" -> "youtube.leanback.v4"
+                "com.disney.disneyplus" -> "com.disney.disneyplus-prod"
+                else -> appId
+            }
+
+            else -> appId
+        }
+    }
+
+    private fun updatePlaybackStateFromCommand(command: String) {
+        when (command) {
+            "KEY_PLAY" -> _playbackState.value = PlaybackState.PLAYING
+            "KEY_PAUSE", "KEY_STOP", "KEY_HOME" -> _playbackState.value = PlaybackState.IDLE
+            "KEY_PLAY_PAUSE" -> {
+                _playbackState.value = if (_playbackState.value == PlaybackState.PLAYING) {
+                    PlaybackState.IDLE
+                } else {
+                    PlaybackState.PLAYING
+                }
+            }
+        }
     }
 }
 
