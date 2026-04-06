@@ -24,6 +24,9 @@ class TVConnectionManager(private val client: HttpClient) {
     private val _currentDevice = MutableStateFlow<TVDevice?>(null)
     val currentDevice: StateFlow<TVDevice?> = _currentDevice.asStateFlow()
 
+    private val _connectionError = MutableStateFlow<String?>(null)
+    val connectionError: StateFlow<String?> = _connectionError.asStateFlow()
+
     private var activeProtocol: TVProtocol? = null
     private var lastConnectedDevice: TVDevice? = null
 
@@ -33,6 +36,7 @@ class TVConnectionManager(private val client: HttpClient) {
             activeProtocol?.disconnect()
             activeProtocol = null
             _currentDevice.value = null
+            _connectionError.value = null
 
             Log.d(TAG, "Connecting to ${device.name} at ${device.ipAddress}:${device.port}")
 
@@ -51,6 +55,7 @@ class TVConnectionManager(private val client: HttpClient) {
             } else {
                 Log.e(TAG, "FAILED: Could not connect to ${device.ipAddress}")
                 _currentDevice.value = null
+                _connectionError.value = buildConnectionError(device)
             }
         }
     }
@@ -87,7 +92,13 @@ class TVConnectionManager(private val client: HttpClient) {
         // TODO (Real TV): AndroidTVRemoteProtocol hoàn chỉnh cần TLS + certificate pairing.
         // Bản hiện tại chỉ thử handshake TCP ở các cổng Android TV phổ biến.
         val remote = AndroidTVRemoteProtocol()
-        val candidatePorts = listOf(device.port, 6466, 6467).distinct()
+        val candidatePorts = buildList {
+            if (device.port == 6466 || device.port == 6467) {
+                add(device.port)
+            }
+            add(6466)
+            add(6467)
+        }.distinct()
 
         candidatePorts.forEach { port ->
             if (remote.connect(device.ipAddress, port)) {
@@ -102,10 +113,26 @@ class TVConnectionManager(private val client: HttpClient) {
 
     private suspend fun connectByPortHeuristics(device: TVDevice): TVProtocol? {
         return when (device.port) {
-            8002, 8001, 8009 -> connectSamsungTV(device)
+            8002, 8001 -> connectSamsungTV(device)
             3000, 8008 -> connectLGTV(device)
-            6466 -> connectAndroidTV(device)
+            6466, 6467 -> connectAndroidTV(device)
             else -> null
+        }
+    }
+
+    private fun buildConnectionError(device: TVDevice): String {
+        return when (device.brand) {
+            TVBrand.ANDROID_TV -> {
+                if (device.port == 8008 || device.port == 8009) {
+                    "This TV was discovered via Google Cast (port ${device.port}). " +
+                        "Remote approval popup needs Android TV Remote service on port 6466/6467 and TLS pairing, which is not fully implemented yet."
+                } else {
+                    "Could not establish Android TV remote session at ${device.ipAddress}. Ensure TV and phone are on same Wi-Fi and remote pairing is enabled on TV."
+                }
+            }
+            TVBrand.SAMSUNG -> "Could not open Samsung remote channel. Make sure Remote Access is allowed on the TV."
+            TVBrand.LG -> "LG pairing API is not fully implemented yet in this build."
+            else -> "No compatible control protocol for ${device.ipAddress}:${device.port}."
         }
     }
 
@@ -114,6 +141,7 @@ class TVConnectionManager(private val client: HttpClient) {
             activeProtocol?.disconnect()
             activeProtocol = null
             _currentDevice.value = null
+            _connectionError.value = null
         }
     }
 

@@ -37,6 +37,7 @@ fun CastScreen(
     connectedDevice: TVDevice?,
     isScanning: Boolean,
     scanError: String?,
+    connectionError: String?,
     hasLocationPermission: Boolean,
     localIpAddress: String?,
     localSubnet: String?,
@@ -121,6 +122,11 @@ fun CastScreen(
                 isScanning = isScanning,
                 hasLocationPermission = hasLocationPermission,
             )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        if (connectionError != null) {
+            ConnectionErrorCard(message = connectionError)
             Spacer(modifier = Modifier.height(12.dp))
         }
 
@@ -332,6 +338,33 @@ private fun ScanErrorCard(message: String, onRetry: () -> Unit) {
             TextButton(onClick = onRetry) {
                 Text("Try again", color = OrangeAccent)
             }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionErrorCard(message: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xFF1A1210))
+            .border(1.dp, Color(0xFF8A533E), RoundedCornerShape(24.dp))
+            .padding(20.dp)
+    ) {
+        Column {
+            Text(
+                text = "Connection hint",
+                color = Color(0xFFFFC7A3),
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                color = Color(0xFFE5C0AF),
+                fontSize = 12.sp,
+            )
         }
     }
 }

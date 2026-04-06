@@ -31,6 +31,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     val currentDevice: StateFlow<TVDevice?> = repository.currentDevice
     val isScanning: StateFlow<Boolean> = repository.isScanning
     val scanError: StateFlow<String?> = repository.scanError
+    val connectionError: StateFlow<String?> = repository.connectionError
 
     private val _uiState = MutableStateFlow(RemoteUiState())
     val uiState: StateFlow<RemoteUiState> = _uiState.asStateFlow()
