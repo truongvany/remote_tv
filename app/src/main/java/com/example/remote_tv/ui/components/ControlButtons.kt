@@ -1,5 +1,10 @@
 package com.example.remote_tv.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,9 +29,15 @@ import androidx.compose.ui.unit.sp
 import com.example.remote_tv.ui.theme.ButtonBackground
 import com.example.remote_tv.ui.theme.OrangeAccent
 import com.example.remote_tv.ui.theme.TextSecondary
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
-fun ControlButtons(onCommand: (String) -> Unit) {
+fun ControlButtons(
+    onCommand: (String) -> Unit,
+    isVoiceListening: Boolean = false,
+    onVoiceClick: () -> Unit = { onCommand("KEY_VOICE") },
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(22.dp)
@@ -47,7 +58,10 @@ fun ControlButtons(onCommand: (String) -> Unit) {
         ) {
             RemoteIconButton(Icons.Filled.Search, "SEARCH") { onCommand("KEY_SEARCH") }
 
-            VoiceButton { onCommand("KEY_VOICE") }
+            VoiceButton(
+                isListening = isVoiceListening,
+                onClick = onVoiceClick,
+            )
 
             RemoteIconButton(Icons.AutoMirrored.Filled.VolumeOff, "MUTE") { onCommand("KEY_MUTE") }
         }
@@ -86,7 +100,20 @@ fun RemoteIconButton(icon: ImageVector, label: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun VoiceButton(onClick: () -> Unit) {
+fun VoiceButton(
+    isListening: Boolean,
+    onClick: () -> Unit,
+) {
+    val transition = rememberInfiniteTransition(label = "voice-orbit")
+    val rotation = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = LinearEasing)
+        ),
+        label = "voice-rotation"
+    )
+
     Box(
         modifier = Modifier
             .size(92.dp)
@@ -95,6 +122,22 @@ fun VoiceButton(onClick: () -> Unit) {
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
+        if (isListening) {
+            repeat(4) { index ->
+                val angle = Math.toRadians((rotation.value + index * 90f).toDouble())
+                val radius = 28f
+                val offsetX = (cos(angle) * radius).toFloat().dp
+                val offsetY = (sin(angle) * radius).toFloat().dp
+
+                Box(
+                    modifier = Modifier
+                        .offset(x = offsetX, y = offsetY)
+                        .size(if (index % 2 == 0) 8.dp else 6.dp)
+                        .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                )
+            }
+        }
+
         Icon(
             Icons.Filled.Mic,
             contentDescription = "Voice",
