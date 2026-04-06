@@ -11,6 +11,7 @@ import io.ktor.websocket.close
 import io.ktor.websocket.send
 import java.net.URLEncoder
 import java.util.Base64
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -58,22 +59,17 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
 
     override suspend fun sendCommand(command: String): Boolean {
         val activeSession = session ?: return false
-        val payload = buildJsonObject {
-            put("method", "ms.remote.control")
-            putJsonObject("params") {
-                put("Cmd", "Click")
-                put("DataOfCmd", command)
-                put("Option", "false")
-                put("TypeOfRemote", "SendRemoteKey")
-            }
-        }
-        return try {
-            activeSession.send(Frame.Text(payload.toString()))
-            InAppDiagnostics.info(tag, "Samsung command sent: $command")
-            true
-        } catch (e: Exception) {
-            InAppDiagnostics.error(tag, "Samsung command failed: $command => ${e.message}")
-            false
+
+        val isVoiceCommand = command == "KEY_BT_VOICE" || command == "KEY_VOICE" || command == "KEY_MIC"
+        return if (isVoiceCommand) {
+            val pressed = sendRemoteKey(activeSession, "Press", command)
+            delay(180)
+            val released = sendRemoteKey(activeSession, "Release", command)
+            val success = pressed && released
+            InAppDiagnostics.info(tag, "Samsung voice command result: $command success=$success")
+            success
+        } else {
+            sendRemoteKey(activeSession, "Click", command)
         }
     }
 
@@ -83,8 +79,10 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
             put("method", "ms.channel.emit")
             putJsonObject("params") {
                 put("event", "ed.apps.launch")
+                put("to", "host")
                 putJsonObject("data") {
                     put("appId", appId)
+                    put("action_type", "NATIVE_LAUNCH")
                 }
             }
         }
@@ -113,6 +111,31 @@ class SamsungProtocol(private val client: HttpClient) : TVProtocol {
             8009 -> listOf("wss", "ws")
             // Mặc định thử ws trước, wss sau
             else -> listOf("ws", "wss")
+        }
+    }
+
+    private suspend fun sendRemoteKey(
+        session: DefaultClientWebSocketSession,
+        cmdType: String,
+        command: String,
+    ): Boolean {
+        val payload = buildJsonObject {
+            put("method", "ms.remote.control")
+            putJsonObject("params") {
+                put("Cmd", cmdType)
+                put("DataOfCmd", command)
+                put("Option", "false")
+                put("TypeOfRemote", "SendRemoteKey")
+            }
+        }
+
+        return try {
+            session.send(Frame.Text(payload.toString()))
+            InAppDiagnostics.info(tag, "Samsung command sent: $command mode=$cmdType")
+            true
+        } catch (e: Exception) {
+            InAppDiagnostics.error(tag, "Samsung command failed: $command mode=$cmdType => ${e.message}")
+            false
         }
     }
 }

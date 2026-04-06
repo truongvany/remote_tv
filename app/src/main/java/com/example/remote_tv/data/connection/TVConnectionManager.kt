@@ -307,13 +307,25 @@ class TVConnectionManager(private val client: HttpClient) {
         val protocol = activeProtocol
         InAppDiagnostics.info(TAG, "[COMMAND_SEND] request=$command")
         return if (protocol != null) {
-            val success = protocol.sendCommand(command)
+            val candidates = resolveCommandCandidates(command, protocol)
+            var success = false
+
+            for (candidate in candidates) {
+                val sent = protocol.sendCommand(candidate)
+                InAppDiagnostics.info(TAG, "[COMMAND_SEND] try=$candidate result=$sent")
+                if (sent) {
+                    success = true
+                    break
+                }
+            }
+
             if (!success) {
                 Log.e(TAG, "Command failed: $command")
                 InAppDiagnostics.error(TAG, "[COMMAND_SEND] failed=$command")
             } else {
                 InAppDiagnostics.info(TAG, "[COMMAND_SEND] success=$command")
             }
+
             success
         } else {
             Log.e(TAG, "No active connection to send command: $command")
@@ -325,7 +337,58 @@ class TVConnectionManager(private val client: HttpClient) {
     private fun TVDevice.toConnectionKey(): String = "$ipAddress:$port"
 
     suspend fun launchApp(appId: String): Boolean {
-        return activeProtocol?.launchApp(appId) ?: false
+        val protocol = activeProtocol
+        val device = _currentDevice.value
+
+        if (protocol == null || device == null) {
+            InAppDiagnostics.error(TAG, "[APP_LAUNCH] blocked_no_session appId=$appId")
+            return false
+        }
+
+        val mappedAppId = mapAppIdForDevice(appId, device)
+        InAppDiagnostics.info(TAG, "[APP_LAUNCH] request=$appId mapped=$mappedAppId brand=${device.brand}")
+        val success = protocol.launchApp(mappedAppId)
+
+        if (!success) {
+            InAppDiagnostics.error(TAG, "[APP_LAUNCH] failed appId=$mappedAppId brand=${device.brand}")
+        } else {
+            InAppDiagnostics.info(TAG, "[APP_LAUNCH] success appId=$mappedAppId")
+        }
+
+        return success
+    }
+
+    private fun resolveCommandCandidates(command: String, protocol: TVProtocol): List<String> {
+        if (protocol is SamsungProtocol) {
+            return when (command) {
+                "KEY_VOICE" -> listOf("KEY_BT_VOICE", "KEY_VOICE", "KEY_MIC")
+                "KEY_SEARCH" -> listOf("KEY_SEARCH", "KEY_FINDER")
+                else -> listOf(command)
+            }
+        }
+
+        if (protocol is AndroidTVRemoteProtocol || protocol is AdbProtocol) {
+            return when (command) {
+                "KEY_VOICE" -> listOf("KEY_VOICE", "VOICE")
+                "KEY_SEARCH" -> listOf("KEY_SEARCH", "SEARCH")
+                else -> listOf(command)
+            }
+        }
+
+        return listOf(command)
+    }
+
+    private fun mapAppIdForDevice(appId: String, device: TVDevice): String {
+        if (device.brand != TVBrand.SAMSUNG) {
+            return appId
+        }
+
+        return when (appId) {
+            "com.netflix.ninja" -> "11101200001"
+            "com.google.android.youtube.tv" -> "111299001912"
+            "com.disney.disneyplus" -> "3201901017640"
+            else -> appId
+        }
     }
 }
 

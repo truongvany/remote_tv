@@ -56,6 +56,8 @@ class AdbProtocol : TVProtocol {
         "KEY_ENTER"      to 66,  "OK"              to 66,
         "KEY_VOL_UP"      to 24, "KEY_VOL_DOWN"    to 25,
         "KEY_MUTE"        to 164,"KEY_PLAY_PAUSE"  to 85,
+        "KEY_SEARCH"      to 84, "SEARCH"          to 84,
+        "KEY_VOICE"       to 231,"VOICE"           to 231,
         "KEY_PLAY"        to 126,"KEY_PAUSE"       to 127,
         "KEY_STOP"        to 86, "KEY_REWIND"      to 89,
         "KEY_FF"          to 90,
