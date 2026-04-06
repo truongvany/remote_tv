@@ -3,6 +3,8 @@ package com.example.remote_tv.data.discovery
 import android.os.Build
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
 import java.net.Inet4Address
@@ -26,7 +28,8 @@ class LocalSubnetScanner(context: Context) {
         connectTimeoutMs: Int = 180,
         maxConcurrency: Int = 64,
     ): List<TVDevice> = coroutineScope {
-        val localIp = resolveLocalIpv4Address() ?: return@coroutineScope emptyList()
+        val localIp = resolveLocalIpv4Address()
+            ?: throw IllegalStateException("Wi-Fi is not connected. Connect phone and TV to the same Wi-Fi network.")
         if (isEmulatorLan(localIp)) {
             throw IllegalStateException(
                 "Running on emulator network ($localIp). Use a physical phone on the same Wi-Fi as your TV to scan real devices."
@@ -59,8 +62,8 @@ class LocalSubnetScanner(context: Context) {
     }
 
     private fun resolveLocalIpv4Address(): String? {
-        val network = connectivityManager.activeNetwork ?: return null
-        val linkProperties = connectivityManager.getLinkProperties(network) ?: return null
+        val wifiNetwork = resolveWifiNetwork() ?: return null
+        val linkProperties = connectivityManager.getLinkProperties(wifiNetwork) ?: return null
 
         return linkProperties.linkAddresses
             .firstOrNull { linkAddress ->
@@ -69,6 +72,13 @@ class LocalSubnetScanner(context: Context) {
             }
             ?.address
             ?.hostAddress
+    }
+
+    private fun resolveWifiNetwork(): Network? {
+        return connectivityManager.allNetworks.firstOrNull { network ->
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return@firstOrNull false
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        }
     }
 
     private fun resolveSubnetBase(localIp: String): String? {

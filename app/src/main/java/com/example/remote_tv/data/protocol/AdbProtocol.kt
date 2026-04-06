@@ -3,6 +3,7 @@ package com.example.remote_tv.data.protocol
 import com.example.remote_tv.data.AdbKeyManager
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -10,6 +11,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.text.Normalizer
 import java.security.Signature as JSignature
 
 /**
@@ -149,23 +151,65 @@ class AdbProtocol : TVProtocol {
 
     override suspend fun sendCommand(command: String): Boolean = withContext(Dispatchers.IO) {
         if (!isConnected) return@withContext false
-        
-        val shellCmd = if (command.startsWith("TEXT:")) {
-            // Android TV shell 'input text' dùng %s thay cho khoảng trắng
-            val text = command.substring(5).replace(" ", "%s").replace("'", "\\'")
-            "input text '$text'\n"
-        } else {
-            val keyCode = keyMap[command] ?: run {
-                InAppDiagnostics.warn(TAG, "ADB: unknown command $command"); return@withContext false
+
+        if (command.startsWith("TEXT:")) {
+            val rawText = command.substring(5)
+            val normalized = Normalizer.normalize(rawText, Normalizer.Form.NFC)
+                .replace("\n", " ")
+                .replace("\r", " ")
+                .replace("\t", " ")
+
+            if (normalized.isBlank()) {
+                InAppDiagnostics.warn(TAG, "ADB TEXT ignored: blank input")
+                return@withContext false
             }
-            "input keyevent $keyCode\n"
+
+            val utf8Hex = normalized.toByteArray(Charsets.UTF_8).joinToString(" ") { byte ->
+                "%02x".format(byte)
+            }
+            InAppDiagnostics.info(TAG, "ADB TEXT payload utf8=$utf8Hex")
+
+            val chunks = normalized.chunked(24)
+            chunks.forEachIndexed { index, chunk ->
+                val escapedText = chunk
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("$", "\\$")
+                    .replace("`", "\\`")
+
+                val encodedSpaceText = escapedText.replace(" ", "%s")
+                val sent = sendShellCommand("input text \"$encodedSpaceText\"\n")
+                if (!sent) {
+                    InAppDiagnostics.error(TAG, "ADB TEXT failed at chunk ${index + 1}/${chunks.size}")
+                    return@withContext false
+                }
+
+                if (index < chunks.lastIndex) {
+                    delay(55)
+                }
+            }
+
+            InAppDiagnostics.info(TAG, "ADB text sent chunks=${chunks.size}")
+            return@withContext true
         }
 
-        return@withContext try {
+        val keyCode = keyMap[command] ?: run {
+            InAppDiagnostics.warn(TAG, "ADB: unknown command $command"); return@withContext false
+        }
+
+        return@withContext sendShellCommand("input keyevent $keyCode\n")
+            .also { sent ->
+                if (sent) {
+                    InAppDiagnostics.info(TAG, "ADB command: $command sent")
+                }
+            }
+    }
+
+    private fun sendShellCommand(shellCmd: String): Boolean {
+        return try {
             send(A_WRTE, localId, remoteId, shellCmd.toByteArray())
             val ack = read()
             if (ack?.command == A_OKAY) send(A_OKAY, localId, remoteId, ByteArray(0))
-            InAppDiagnostics.info(TAG, "ADB command: $command sent")
             true
         } catch (e: Exception) {
             InAppDiagnostics.error(TAG, "ADB sendCommand failed: ${e.message}"); false

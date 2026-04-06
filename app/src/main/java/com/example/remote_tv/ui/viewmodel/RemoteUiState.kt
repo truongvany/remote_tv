@@ -7,5 +7,7 @@ data class RemoteUiState(
     val hasLocationPermission: Boolean = false,
     val localIpAddress: String? = null,
     val localSubnet: String? = null,
+    val showNowPlaying: Boolean = false,
+    val actionMessage: String? = null,
 )
 

@@ -4,6 +4,8 @@ import android.content.Context
 import com.example.remote_tv.data.AdbKeyManager
 import com.example.remote_tv.data.connection.TVConnectionManager
 import com.example.remote_tv.data.debug.InAppDiagnostics
+import com.example.remote_tv.data.model.AppLaunchResult
+import com.example.remote_tv.data.model.PlaybackState
 import com.example.remote_tv.data.discovery.TVDiscoveryService
 import com.example.remote_tv.data.model.TVDevice
 import io.ktor.client.HttpClient
@@ -71,6 +73,7 @@ class TVRepositoryImpl(context: Context) : TVRepository {
     override val isScanning: StateFlow<Boolean> = discoveryService.isScanning
     override val scanError: StateFlow<String?> = discoveryService.scanError
     override val connectionError: StateFlow<String?> = connectionManager.connectionError
+    override val playbackState: StateFlow<PlaybackState> = connectionManager.playbackState
     override val diagnosticLogs: StateFlow<List<String>> = InAppDiagnostics.logs
 
     override fun startDiscovery() = discoveryService.startDiscovery()
@@ -96,7 +99,7 @@ class TVRepositoryImpl(context: Context) : TVRepository {
         return connectionManager.sendCommand(command)
     }
 
-    override suspend fun launchApp(appId: String): Boolean {
+    override suspend fun launchApp(appId: String): AppLaunchResult {
         return connectionManager.launchApp(appId)
     }
 }

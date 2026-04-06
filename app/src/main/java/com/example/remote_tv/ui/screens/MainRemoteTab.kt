@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,10 @@ fun MainRemoteTab(viewModel: TVViewModel) {
     val currentDevice by viewModel.currentDevice.collectAsState()
     val deviceName = currentDevice?.name ?: "Living Room TV"
     var isVoiceListening by remember { mutableStateOf(false) }
+    var voiceStatusText by remember { mutableStateOf("Tap mic to start speaking") }
+    var voiceTranscript by remember { mutableStateOf("") }
+    var voiceRmsLevel by remember { mutableFloatStateOf(0f) }
+    var busyRetryAttempted by remember { mutableStateOf(false) }
 
     val speechRecognizer = remember(context) {
         if (SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -39,21 +44,32 @@ fun MainRemoteTab(viewModel: TVViewModel) {
     val recognizerIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1200L)
         }
     }
 
     val startVoiceRecognition = {
+        voiceTranscript = ""
+        voiceStatusText = "Starting microphone..."
+        voiceRmsLevel = 0f
+        busyRetryAttempted = false
+        isVoiceListening = true
+
         if (speechRecognizer == null) {
-            // Fallback: ask TV to open native voice assistant if speech recognizer is unavailable.
+            voiceStatusText = "Voice recognizer is unavailable on this device"
+            isVoiceListening = false
             viewModel.sendCommand("KEY_VOICE")
         } else {
             runCatching {
-                isVoiceListening = true
+                speechRecognizer.cancel()
                 speechRecognizer.startListening(recognizerIntent)
             }.onFailure {
+                voiceStatusText = "Cannot start listening right now"
                 isVoiceListening = false
                 viewModel.sendCommand("KEY_VOICE")
             }
@@ -65,6 +81,8 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         onResult = { granted ->
             if (granted) {
                 startVoiceRecognition()
+            } else {
+                voiceStatusText = "Microphone permission is required"
             }
         }
     )
@@ -73,27 +91,45 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         val listener = object : RecognitionListener {
             override fun onReadyForSpeech(params: android.os.Bundle?) {
                 isVoiceListening = true
+                voiceStatusText = "Listening..."
             }
 
             override fun onBeginningOfSpeech() {
                 isVoiceListening = true
+                voiceStatusText = "Speak naturally"
             }
 
-            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onRmsChanged(rmsdB: Float) {
+                voiceRmsLevel = rmsdB.coerceAtLeast(0f)
+            }
             override fun onBufferReceived(buffer: ByteArray?) = Unit
 
-            override fun onEndOfSpeech() = Unit
+            override fun onEndOfSpeech() {
+                voiceStatusText = "Processing your voice..."
+            }
 
             override fun onError(error: Int) {
+                if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && !busyRetryAttempted) {
+                    busyRetryAttempted = true
+                    runCatching {
+                        speechRecognizer?.cancel()
+                        speechRecognizer?.startListening(recognizerIntent)
+                    }.onFailure {
+                        isVoiceListening = false
+                        voiceStatusText = "Voice recognizer is busy"
+                    }
+                    return
+                }
+
                 isVoiceListening = false
+                voiceRmsLevel = 0f
+                voiceStatusText = speechErrorMessage(error)
                 if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    // Fallback for TVs that support native voice trigger.
                     viewModel.sendCommand("KEY_VOICE")
                 }
             }
 
             override fun onResults(results: android.os.Bundle?) {
-                isVoiceListening = false
                 val spokenText = results
                     ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()
@@ -101,14 +137,32 @@ fun MainRemoteTab(viewModel: TVViewModel) {
                     .orEmpty()
 
                 if (spokenText.isNotEmpty()) {
-                    // Open search first and then inject recognized text when protocol supports it.
+                    voiceTranscript = spokenText
+                    voiceStatusText = "Sending to TV..."
                     viewModel.sendCommand("KEY_SEARCH")
                     viewModel.sendCommand("TEXT:$spokenText")
                     viewModel.sendCommand("KEY_ENTER")
+                } else {
+                    voiceStatusText = "No speech detected"
+                }
+
+                isVoiceListening = false
+                voiceRmsLevel = 0f
+            }
+
+            override fun onPartialResults(partialResults: android.os.Bundle?) {
+                val partialText = partialResults
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    ?.trim()
+                    .orEmpty()
+
+                if (partialText.isNotEmpty()) {
+                    voiceTranscript = partialText
+                    voiceStatusText = "Listening..."
                 }
             }
 
-            override fun onPartialResults(partialResults: android.os.Bundle?) = Unit
             override fun onEvent(eventType: Int, params: android.os.Bundle?) = Unit
         }
 
@@ -122,75 +176,120 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        TopBar(
-            deviceName = deviceName,
-            onPower = { viewModel.powerToggle() },
-            onCastClick = { viewModel.selectTab(2) }
-        )
+    val uiState by viewModel.uiState.collectAsState()
 
-        NowPlayingCard()
+    LaunchedEffect(uiState.actionMessage) {
+        val message = uiState.actionMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.consumeActionMessage()
+    }
 
-        val uiState by viewModel.uiState.collectAsState()
-
-        ModeSelector(
-            selectedMode = uiState.selectedMode,
-            onModeSelected = { viewModel.selectMode(it) }
-        )
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        when (uiState.selectedMode) {
-            0 -> DPad(
-                onDirection = { viewModel.sendDirection(it) },
-                onOk = { viewModel.sendOk() }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            TopBar(
+                deviceName = deviceName,
+                onPower = { viewModel.powerToggle() },
+                onCastClick = { viewModel.selectTab(2) }
             )
-            1 -> Touchpad(
-                onSwipeUp = { viewModel.sendCommand("UP") },
-                onSwipeDown = { viewModel.sendCommand("DOWN") },
-                onSwipeLeft = { viewModel.sendCommand("LEFT") },
-                onSwipeRight = { viewModel.sendCommand("RIGHT") },
-                onTap = { viewModel.sendOk() }
+
+            if (uiState.showNowPlaying) {
+                NowPlayingCard()
+            }
+
+            ModeSelector(
+                selectedMode = uiState.selectedMode,
+                onModeSelected = { viewModel.selectMode(it) }
             )
-            2 -> KeyboardInput(
-                onSendText = { text -> viewModel.sendCommand("TEXT:$text") }
-            )
-        }
 
-        Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-        ControlButtons(
-            onCommand = { viewModel.sendCommand(it) },
-            isVoiceListening = isVoiceListening,
-            onVoiceClick = {
-                if (isVoiceListening) {
-                    runCatching { speechRecognizer?.stopListening() }
-                    isVoiceListening = false
-                } else {
-                    val hasAudioPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.RECORD_AUDIO,
-                    ) == PackageManager.PERMISSION_GRANTED
+            when (uiState.selectedMode) {
+                0 -> DPad(
+                    onDirection = { viewModel.sendDirection(it) },
+                    onOk = { viewModel.sendOk() }
+                )
 
-                    if (hasAudioPermission) {
-                        startVoiceRecognition()
+                1 -> Touchpad(
+                    onSwipeUp = { viewModel.sendCommand("UP") },
+                    onSwipeDown = { viewModel.sendCommand("DOWN") },
+                    onSwipeLeft = { viewModel.sendCommand("LEFT") },
+                    onSwipeRight = { viewModel.sendCommand("RIGHT") },
+                    onTap = { viewModel.sendOk() }
+                )
+
+                2 -> KeyboardInput(
+                    onSendText = { text -> viewModel.sendCommand("TEXT:$text") }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            ControlButtons(
+                onCommand = { viewModel.sendCommand(it) },
+                isVoiceListening = isVoiceListening,
+                onVoiceClick = {
+                    if (isVoiceListening) {
+                        runCatching { speechRecognizer?.stopListening() }
+                        isVoiceListening = false
+                        voiceRmsLevel = 0f
+                        voiceStatusText = "Voice listening stopped"
                     } else {
-                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        val hasAudioPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (hasAudioPermission) {
+                            startVoiceRecognition()
+                        } else {
+                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
                     }
                 }
-            }
-        )
+            )
 
-        Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-        QuickLaunch(onLaunchApp = { viewModel.launchApp(it) })
+            QuickLaunch(
+                isEnabled = currentDevice != null,
+                onLaunchApp = { viewModel.launchApp(it) }
+            )
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        if (isVoiceListening) {
+            VoiceListeningOverlay(
+                statusText = voiceStatusText,
+                transcript = voiceTranscript,
+                rmsLevel = voiceRmsLevel,
+                onStop = {
+                    runCatching { speechRecognizer?.stopListening() }
+                    isVoiceListening = false
+                    voiceRmsLevel = 0f
+                    voiceStatusText = "Voice listening stopped"
+                }
+            )
+        }
+    }
+}
+
+private fun speechErrorMessage(errorCode: Int): String {
+    return when (errorCode) {
+        SpeechRecognizer.ERROR_AUDIO -> "Audio input error"
+        SpeechRecognizer.ERROR_CLIENT -> "Voice recognition interrupted"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission missing"
+        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network issue while recognizing"
+        SpeechRecognizer.ERROR_NO_MATCH -> "Could not understand that, try again"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Voice recognizer is busy"
+        SpeechRecognizer.ERROR_SERVER -> "Speech service is unavailable"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
+        else -> "Voice recognition failed"
     }
 }
