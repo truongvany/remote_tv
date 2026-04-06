@@ -35,6 +35,7 @@ import com.example.remote_tv.ui.theme.TextSecondary
 fun CastScreen(
     devices: List<TVDevice>,
     connectedDevice: TVDevice?,
+    connectingDeviceKey: String?,
     isScanning: Boolean,
     scanError: String?,
     connectionError: String?,
@@ -142,12 +143,15 @@ fun CastScreen(
             EmptyDiscoveryCard(isScanning = isScanning)
         } else {
             devices.forEachIndexed { index, device ->
+                val connectionKey = "${device.ipAddress}:${device.port}"
                 val isConnected =
                     connectedDevice?.ipAddress == device.ipAddress &&
                         connectedDevice?.port == device.port
+                val isConnecting = connectingDeviceKey == connectionKey
                 DeviceItem(
                     device = device,
                     isConnected = isConnected,
+                    isConnecting = isConnecting,
                     onClick = { onDeviceSelected(device) }
                 )
 
@@ -234,8 +238,12 @@ fun ScanningAnimationArea() {
 }
 
 @Composable
-fun DeviceItem(device: TVDevice, isConnected: Boolean, onClick: () -> Unit) {
-    val status = if (isConnected) "CONNECTED" else "AVAILABLE"
+fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, onClick: () -> Unit) {
+    val status = when {
+        isConnecting -> "CONNECTING..."
+        isConnected -> "CONNECTED"
+        else -> "AVAILABLE"
+    }
 
     Box(
         modifier = Modifier
@@ -244,7 +252,7 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, onClick: () -> Unit) {
             .clip(RoundedCornerShape(24.dp))
             .background(if (isConnected) Color(0xFF151515) else Color(0xFF0D0D0D))
             .then(if (isConnected) Modifier.border(1.dp, OrangeAccent.copy(alpha = 0.3f), RoundedCornerShape(24.dp)) else Modifier)
-            .clickable { onClick() }
+            .clickable(enabled = !isConnecting) { onClick() }
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -264,11 +272,28 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(device.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(status, color = if (isConnected) OrangeAccent else Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    status,
+                    color = if (isConnected || isConnecting) OrangeAccent else Color.Gray,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
             Spacer(modifier = Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End) {
-                Icon(Icons.Filled.SignalCellularAlt, contentDescription = null, tint = if (isConnected) OrangeAccent else Color(0xFF333333))
+                if (isConnecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = OrangeAccent,
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.SignalCellularAlt,
+                        contentDescription = null,
+                        tint = if (isConnected) OrangeAccent else Color(0xFF333333)
+                    )
+                }
                 Text(
                     text = "${device.ipAddress}:${device.port}",
                     color = Color(0xFF7A7A7A),

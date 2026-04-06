@@ -1,5 +1,6 @@
 package com.example.remote_tv.data.connection
 
+import android.os.SystemClock
 import android.util.Log
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
@@ -12,10 +13,12 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class TVConnectionManager(private val client: HttpClient) {
 
@@ -28,16 +31,30 @@ class TVConnectionManager(private val client: HttpClient) {
     private val _connectionError = MutableStateFlow<String?>(null)
     val connectionError: StateFlow<String?> = _connectionError.asStateFlow()
 
+    private val _connectingDeviceKey = MutableStateFlow<String?>(null)
+    val connectingDeviceKey: StateFlow<String?> = _connectingDeviceKey.asStateFlow()
+
     private var activeProtocol: TVProtocol? = null
     private var lastConnectedDevice: TVDevice? = null
+    private var connectJob: Job? = null
+    private var currentConnectAttemptCount: Int = 0
 
     fun connect(device: TVDevice) {
+        if (_connectingDeviceKey.value != null) {
+            InAppDiagnostics.warn(TAG, "[CONNECT_ATTEMPT] Ignored: another connection is in progress")
+            return
+        }
+
+        val targetKey = device.toConnectionKey()
         lastConnectedDevice = device
-        scope.launch {
+        connectJob?.cancel()
+        connectJob = scope.launch {
             activeProtocol?.disconnect()
             activeProtocol = null
             _currentDevice.value = null
             _connectionError.value = null
+            _connectingDeviceKey.value = targetKey
+            currentConnectAttemptCount = 0
 
             Log.d(TAG, "Connecting to ${device.name} at ${device.ipAddress}:${device.port}")
             InAppDiagnostics.info(
@@ -45,38 +62,57 @@ class TVConnectionManager(private val client: HttpClient) {
                 "Connect request: ${device.name} (${device.brand}) ${device.ipAddress}:${device.port}",
             )
 
-            val protocol: TVProtocol? = when (device.brand) {
-                TVBrand.SAMSUNG -> connectSamsungTV(device)
-                TVBrand.LG -> connectLGTV(device)
-                TVBrand.ANDROID_TV -> connectAndroidTV(device)
-                TVBrand.UNKNOWN -> connectByPortHeuristics(device)
-                else -> null
-            }
+            try {
+                val protocol: TVProtocol? = when (device.brand) {
+                    TVBrand.SAMSUNG -> connectSamsungTV(device)
+                    TVBrand.LG -> connectLGTV(device)
+                    TVBrand.ANDROID_TV -> connectAndroidTV(device)
+                    TVBrand.UNKNOWN -> connectByPortHeuristics(device)
+                    else -> null
+                }
 
-            if (protocol != null) {
-                activeProtocol = protocol
-                _currentDevice.value = device.copy(isConnected = true)
-                Log.d(TAG, "SUCCESS: Connected to ${device.name}")
-                InAppDiagnostics.info(TAG, "Connected: ${device.name} at ${device.ipAddress}:${device.port}")
-            } else {
-                Log.e(TAG, "FAILED: Could not connect to ${device.ipAddress}")
-                _currentDevice.value = null
-                _connectionError.value = buildConnectionError(device)
-                InAppDiagnostics.error(TAG, "Connect failed: ${device.name} ${device.ipAddress}:${device.port}")
+                if (protocol != null) {
+                    activeProtocol = protocol
+                    _currentDevice.value = device.copy(isConnected = true)
+                    Log.d(TAG, "SUCCESS: Connected to ${device.name}")
+                    InAppDiagnostics.info(TAG, "[CONNECT_SUCCESS] ${device.name} ${device.ipAddress}:${device.port}")
+                } else {
+                    Log.e(TAG, "FAILED: Could not connect to ${device.ipAddress}")
+                    _currentDevice.value = null
+                    _connectionError.value = buildConnectionError(device)
+                    InAppDiagnostics.error(TAG, "[CONNECT_FAIL] ${device.name} ${device.ipAddress}:${device.port}")
+                }
+            } finally {
+                if (_connectingDeviceKey.value == targetKey) {
+                    _connectingDeviceKey.value = null
+                }
             }
         }
     }
 
     private suspend fun connectSamsungTV(device: TVDevice): TVProtocol? {
-        val protocol = SamsungProtocol(client)
         val candidatePorts = listOf(device.port, 8002, 8001, 8009).distinct()
 
-        candidatePorts.forEach { port ->
-            InAppDiagnostics.info(TAG, "Trying Samsung channel ${device.ipAddress}:$port")
-            if (protocol.connect(device.ipAddress, port)) {
-                Log.d(TAG, "Connected via SamsungProtocol at port $port")
-                InAppDiagnostics.info(TAG, "Samsung channel opened on port $port")
-                return protocol
+        repeat(ConnectionPolicy.MAX_CONNECT_ROUNDS) { roundIndex ->
+            val round = roundIndex + 1
+            candidatePorts.forEach { port ->
+                val protocol = SamsungProtocol(client)
+                val connected = attemptConnect(
+                    protocolName = "Samsung",
+                    ipAddress = device.ipAddress,
+                    port = port,
+                    round = round,
+                    connectAction = { protocol.connect(device.ipAddress, port) }
+                )
+
+                if (connected) {
+                    Log.d(TAG, "Connected via SamsungProtocol at port $port")
+                    return protocol
+                }
+            }
+
+            if (round < ConnectionPolicy.MAX_CONNECT_ROUNDS) {
+                delay(ConnectionPolicy.backoffMs(round))
             }
         }
 
@@ -84,15 +120,28 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private suspend fun connectLGTV(device: TVDevice): TVProtocol? {
-        val protocol = LGProtocol(client)
         val candidatePorts = listOf(device.port, 3000, 8008).distinct()
 
-        candidatePorts.forEach { port ->
-            InAppDiagnostics.info(TAG, "Trying LG channel ${device.ipAddress}:$port")
-            if (protocol.connect(device.ipAddress, port)) {
-                Log.d(TAG, "Connected via LGProtocol at port $port")
-                InAppDiagnostics.info(TAG, "LG channel opened on port $port")
-                return protocol
+        repeat(ConnectionPolicy.MAX_CONNECT_ROUNDS) { roundIndex ->
+            val round = roundIndex + 1
+            candidatePorts.forEach { port ->
+                val protocol = LGProtocol(client)
+                val connected = attemptConnect(
+                    protocolName = "LG",
+                    ipAddress = device.ipAddress,
+                    port = port,
+                    round = round,
+                    connectAction = { protocol.connect(device.ipAddress, port) }
+                )
+
+                if (connected) {
+                    Log.d(TAG, "Connected via LGProtocol at port $port")
+                    return protocol
+                }
+            }
+
+            if (round < ConnectionPolicy.MAX_CONNECT_ROUNDS) {
+                delay(ConnectionPolicy.backoffMs(round))
             }
         }
 
@@ -102,7 +151,6 @@ class TVConnectionManager(private val client: HttpClient) {
     private suspend fun connectAndroidTV(device: TVDevice): TVProtocol? {
         // TODO (Real TV): AndroidTVRemoteProtocol hoàn chỉnh cần TLS + certificate pairing.
         // Bản hiện tại chỉ thử handshake TCP ở các cổng Android TV phổ biến.
-        val remote = AndroidTVRemoteProtocol()
         val candidatePorts = buildList {
             if (device.port == 6466 || device.port == 6467) {
                 add(device.port)
@@ -111,12 +159,26 @@ class TVConnectionManager(private val client: HttpClient) {
             add(6467)
         }.distinct()
 
-        candidatePorts.forEach { port ->
-            InAppDiagnostics.info(TAG, "Trying AndroidTV remote ${device.ipAddress}:$port")
-            if (remote.connect(device.ipAddress, port)) {
-                Log.d(TAG, "Connected via AndroidTVRemoteProtocol at port $port")
-                InAppDiagnostics.info(TAG, "AndroidTV remote socket connected on port $port")
-                return remote
+        repeat(ConnectionPolicy.MAX_CONNECT_ROUNDS) { roundIndex ->
+            val round = roundIndex + 1
+            candidatePorts.forEach { port ->
+                val remote = AndroidTVRemoteProtocol()
+                val connected = attemptConnect(
+                    protocolName = "AndroidTV",
+                    ipAddress = device.ipAddress,
+                    port = port,
+                    round = round,
+                    connectAction = { remote.connect(device.ipAddress, port) }
+                )
+
+                if (connected) {
+                    Log.d(TAG, "Connected via AndroidTVRemoteProtocol at port $port")
+                    return remote
+                }
+            }
+
+            if (round < ConnectionPolicy.MAX_CONNECT_ROUNDS) {
+                delay(ConnectionPolicy.backoffMs(round))
             }
         }
 
@@ -147,7 +209,41 @@ class TVConnectionManager(private val client: HttpClient) {
             TVBrand.SAMSUNG -> "Could not open Samsung remote channel. Make sure Remote Access is allowed on the TV."
             TVBrand.LG -> "LG pairing API is not fully implemented yet in this build."
             else -> "No compatible control protocol for ${device.ipAddress}:${device.port}."
+        } + " Attempts=$currentConnectAttemptCount, timeout=${ConnectionPolicy.CONNECT_TIMEOUT_MS}ms."
+    }
+
+    private suspend fun attemptConnect(
+        protocolName: String,
+        ipAddress: String,
+        port: Int,
+        round: Int,
+        connectAction: suspend () -> Boolean,
+    ): Boolean {
+        currentConnectAttemptCount += 1
+        val startTime = SystemClock.elapsedRealtime()
+        InAppDiagnostics.info(
+            TAG,
+            "[CONNECT_ATTEMPT] $protocolName round=$round target=$ipAddress:$port timeout=${ConnectionPolicy.CONNECT_TIMEOUT_MS}ms"
+        )
+
+        val connected = withTimeoutOrNull(ConnectionPolicy.CONNECT_TIMEOUT_MS) {
+            connectAction()
+        } ?: false
+
+        val elapsed = SystemClock.elapsedRealtime() - startTime
+        if (connected) {
+            InAppDiagnostics.info(
+                TAG,
+                "[CONNECT_ATTEMPT] success $protocolName $ipAddress:$port elapsed=${elapsed}ms"
+            )
+        } else {
+            InAppDiagnostics.warn(
+                TAG,
+                "[CONNECT_ATTEMPT] failed $protocolName $ipAddress:$port elapsed=${elapsed}ms"
+            )
         }
+
+        return connected
     }
 
     fun disconnect() {
@@ -156,6 +252,7 @@ class TVConnectionManager(private val client: HttpClient) {
             activeProtocol = null
             _currentDevice.value = null
             _connectionError.value = null
+            _connectingDeviceKey.value = null
             InAppDiagnostics.info(TAG, "Disconnected active protocol")
         }
     }
@@ -174,22 +271,24 @@ class TVConnectionManager(private val client: HttpClient) {
 
     suspend fun sendCommand(command: String): Boolean {
         val protocol = activeProtocol
-        InAppDiagnostics.info(TAG, "Send command: $command")
+        InAppDiagnostics.info(TAG, "[COMMAND_SEND] request=$command")
         return if (protocol != null) {
             val success = protocol.sendCommand(command)
             if (!success) {
                 Log.e(TAG, "Command failed: $command")
-                InAppDiagnostics.error(TAG, "Command failed: $command")
+                InAppDiagnostics.error(TAG, "[COMMAND_SEND] failed=$command")
             } else {
-                InAppDiagnostics.info(TAG, "Command sent: $command")
+                InAppDiagnostics.info(TAG, "[COMMAND_SEND] success=$command")
             }
             success
         } else {
             Log.e(TAG, "No active connection to send command: $command")
-            InAppDiagnostics.error(TAG, "Command blocked (no active connection): $command")
+            InAppDiagnostics.error(TAG, "[COMMAND_SEND] blocked_no_session=$command")
             false
         }
     }
+
+    private fun TVDevice.toConnectionKey(): String = "$ipAddress:$port"
 
     suspend fun launchApp(appId: String): Boolean {
         return activeProtocol?.launchApp(appId) ?: false

@@ -29,6 +29,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     val discoveredDevices: StateFlow<List<TVDevice>> = repository.discoveredDevices
     val currentDevice: StateFlow<TVDevice?> = repository.currentDevice
+    val connectingDeviceKey: StateFlow<String?> = repository.connectingDeviceKey
     val isScanning: StateFlow<Boolean> = repository.isScanning
     val scanError: StateFlow<String?> = repository.scanError
     val connectionError: StateFlow<String?> = repository.connectionError

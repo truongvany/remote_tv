@@ -28,6 +28,7 @@ import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.ui.components.DeviceSelectionDialog
 import com.example.remote_tv.ui.theme.OrangeAccent
 import com.example.remote_tv.ui.viewmodel.TVViewModel
+import kotlinx.coroutines.delay
 
 private data class NavTab(val icon: ImageVector, val contentDescription: String)
 
@@ -43,11 +44,14 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val discoveredDevices by viewModel.discoveredDevices.collectAsState()
     val currentDevice by viewModel.currentDevice.collectAsState()
+    val connectingDeviceKey by viewModel.connectingDeviceKey.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val scanError by viewModel.scanError.collectAsState()
     val connectionError by viewModel.connectionError.collectAsState()
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val settingsUiState by viewModel.settingsUiState.collectAsState()
+
+    var lastConnectedKey by remember { mutableStateOf<String?>(null) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -62,6 +66,15 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                 locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             }
         }
+    }
+
+    LaunchedEffect(currentDevice?.ipAddress, currentDevice?.port, uiState.selectedTab) {
+        val currentKey = currentDevice?.let { "${it.ipAddress}:${it.port}" }
+        if (currentKey != null && currentKey != lastConnectedKey && uiState.selectedTab == 2) {
+            delay(1000)
+            viewModel.selectTab(0)
+        }
+        lastConnectedKey = currentKey
     }
 
     if (uiState.showDeviceDialog) {
@@ -97,6 +110,7 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                 2 -> CastScreen(
                     devices = discoveredDevices,
                     connectedDevice = currentDevice,
+                    connectingDeviceKey = connectingDeviceKey,
                     isScanning = isScanning,
                     scanError = scanError,
                     connectionError = connectionError,

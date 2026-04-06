@@ -23,6 +23,7 @@ class TVRepositoryImpl(context: Context) : TVRepository {
 
     override val discoveredDevices: StateFlow<List<TVDevice>> = discoveryService.discoveredDevices
     override val currentDevice: StateFlow<TVDevice?> = connectionManager.currentDevice
+    override val connectingDeviceKey: StateFlow<String?> = connectionManager.connectingDeviceKey
     override val isScanning: StateFlow<Boolean> = discoveryService.isScanning
     override val scanError: StateFlow<String?> = discoveryService.scanError
     override val connectionError: StateFlow<String?> = connectionManager.connectionError
