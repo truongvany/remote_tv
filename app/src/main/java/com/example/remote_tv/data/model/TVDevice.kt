@@ -6,7 +6,9 @@ data class TVDevice(
     val ipAddress: String,
     val port: Int,
     val brand: TVBrand = TVBrand.UNKNOWN,
-    val isConnected: Boolean = false
+    val isConnected: Boolean = false,
+    val macAddress: String? = null,
+    val modelName: String? = null,
 )
 
 enum class TVBrand {

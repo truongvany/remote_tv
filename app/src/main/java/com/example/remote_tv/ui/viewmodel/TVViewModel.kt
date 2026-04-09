@@ -17,12 +17,19 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.remote_tv.data.model.AppLaunchStatus
 import com.example.remote_tv.data.model.AppThemeMode
+import com.example.remote_tv.data.model.Macro
 import com.example.remote_tv.data.model.PlaybackState
+import com.example.remote_tv.data.model.TVApp
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.model.toTVDevice
+import com.example.remote_tv.data.network.WakeOnLanSender
+import com.example.remote_tv.data.casting.CastManager
 import com.example.remote_tv.data.preferences.AppPreferencesRepository
+import com.example.remote_tv.data.preferences.MacroRepository
 import com.example.remote_tv.data.repository.TVRepository
 import com.example.remote_tv.data.repository.TVRepositoryImpl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +42,8 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: TVRepository = TVRepositoryImpl(application)
     private val appPreferencesRepository = AppPreferencesRepository(application)
+    private val macroRepository = MacroRepository(application)
+    private val castManager = CastManager(application)
 
     val discoveredDevices: StateFlow<List<TVDevice>> = repository.discoveredDevices
     val currentDevice: StateFlow<TVDevice?> = repository.currentDevice
@@ -44,12 +53,24 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     val connectionError: StateFlow<String?> = repository.connectionError
     val playbackState: StateFlow<PlaybackState> = repository.playbackState
     val diagnosticLogs: StateFlow<List<String>> = repository.diagnosticLogs
+    val installedApps: StateFlow<List<TVApp>> = repository.installedApps
 
     private val _uiState = MutableStateFlow(RemoteUiState())
     val uiState: StateFlow<RemoteUiState> = _uiState.asStateFlow()
 
     private val _settingsUiState = MutableStateFlow(SettingsUiState())
     val settingsUiState: StateFlow<SettingsUiState> = _settingsUiState.asStateFlow()
+
+    private val _macros = MutableStateFlow<List<Macro>>(emptyList())
+    val macros: StateFlow<List<Macro>> = _macros.asStateFlow()
+
+    private val _isWaking = MutableStateFlow(false)
+    val isWaking: StateFlow<Boolean> = _isWaking.asStateFlow()
+
+    private val _lastDeviceName = MutableStateFlow<String?>(null)
+    val lastDeviceName: StateFlow<String?> = _lastDeviceName.asStateFlow()
+
+    val isCasting: StateFlow<Boolean> = castManager.isCasting
 
     init {
         _uiState.update {
@@ -61,6 +82,8 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         }
         observeSettings()
         observePlaybackVisibility()
+        observeMacros()
+        autoReconnectLastDevice()
     }
 
     private fun observeSettings() {
@@ -133,6 +156,16 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     fun connectToDevice(device: TVDevice) {
         repository.connectToDevice(device)
         hideDeviceDialog()
+        // Lưu thiết bị vào disk để auto-reconnect lần sau
+        viewModelScope.launch {
+            repository.saveLastDevice(device)
+            _lastDeviceName.value = device.name
+        }
+        // Sau khi kết nối xong, lấy danh sách app
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(3000) // chờ kết nối ổn định
+            fetchInstalledApps()
+        }
     }
 
     fun clearDiagnosticLogs() {
@@ -140,6 +173,55 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun disconnect() = repository.disconnect()
+
+    // ----------------------------------------------------------------
+    // Auto-Reconnect
+    // ----------------------------------------------------------------
+
+    private fun autoReconnectLastDevice() {
+        viewModelScope.launch {
+            val saved = repository.loadLastDevice() ?: return@launch
+            _lastDeviceName.value = saved.name
+            Log.d("TVViewModel", "Auto-reconnecting to last device: ${saved.name} at ${saved.ip}:${saved.port}")
+            _uiState.update { it.copy(actionMessage = "Reconnecting to ${saved.name}...") }
+            repository.connectToDevice(saved.toTVDevice())
+        }
+    }
+
+    private fun observeMacros() {
+        viewModelScope.launch {
+            macroRepository.macrosFlow.collect { list ->
+                _macros.value = list
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Wake-on-LAN
+    // ----------------------------------------------------------------
+
+    fun wakeLastDevice() {
+        viewModelScope.launch {
+            val saved = repository.loadLastDevice()
+            val mac = saved?.macAddress
+            if (mac == null) {
+                _uiState.update { it.copy(actionMessage = "Không tìm thấy địa chỉ MAC của TV") }
+                return@launch
+            }
+            _isWaking.value = true
+            _uiState.update { it.copy(actionMessage = "Đang đánh thức ${saved.name}...") }
+
+            val broadcastIp = _uiState.value.localSubnet
+                ?.let { WakeOnLanSender.broadcastFromSubnet(it) }
+                ?: "255.255.255.255"
+
+            val success = repository.wakeDevice(mac, broadcastIp)
+            _isWaking.value = false
+            _uiState.update {
+                it.copy(actionMessage = if (success) "Magic Packet đã gửi đến ${saved.name}" else "Gửi Wake-on-LAN thất bại")
+            }
+        }
+    }
 
     fun sendCommand(command: String) {
         viewModelScope.launch {
@@ -194,6 +276,57 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { it.copy(actionMessage = null) }
             }
         }
+    }
+
+    // ----------------------------------------------------------------
+    // App List Sync
+    // ----------------------------------------------------------------
+
+    fun fetchInstalledApps() {
+        viewModelScope.launch {
+            repository.fetchInstalledApps()
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Macro Keys
+    // ----------------------------------------------------------------
+
+    fun executeMacro(macro: Macro) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(actionMessage = "Running: ${macro.name}") }
+            for (command in macro.commands) {
+                sendCommand(command)
+                delay(macro.delayMs)
+            }
+            _uiState.update { it.copy(actionMessage = "${macro.name} done") }
+        }
+    }
+
+    fun addMacro(macro: Macro) {
+        viewModelScope.launch {
+            val updated = _macros.value.toMutableList().also { it.add(macro) }
+            macroRepository.saveMacros(updated)
+        }
+    }
+
+    fun removeMacro(macroId: String) {
+        viewModelScope.launch {
+            val updated = _macros.value.filter { it.id != macroId }
+            macroRepository.saveMacros(updated)
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Media Casting
+    // ----------------------------------------------------------------
+
+    fun castVideo(url: String, title: String) {
+        castManager.castVideo(url, title)
+    }
+
+    fun stopCasting() {
+        castManager.stopCasting()
     }
 
     // Hàm phụ trợ xử lý Socket ADB của Huy chạy trên luồng nền (IO)

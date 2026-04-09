@@ -47,6 +47,8 @@ fun CastScreen(
     onRefreshScan: () -> Unit,
     onDeviceSelected: (TVDevice) -> Unit,
     onClearDiagnostics: () -> Unit,
+    onScreenMirroringClick: () -> Unit = {},
+    onCastVideo: (String, String) -> Unit = { _, _ -> }
 ) {
     var showDebugInfo by rememberSaveable { mutableStateOf(false) }
 
@@ -174,13 +176,27 @@ fun CastScreen(
         )
         Spacer(modifier = Modifier.height(16.dp))
         
-        ScreenMirroringCard()
+        ScreenMirroringCard(onClick = onScreenMirroringClick)
         
         Spacer(modifier = Modifier.height(16.dp))
         
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            QuickActionItem(Icons.Filled.PlayCircle, "YouTube", Color(0xFF2D1010), Color.Red, Modifier.weight(1f))
-            QuickActionItem(Icons.Filled.PhotoLibrary, "Photos", Color(0xFF10182D), Color(0xFF4285F4), Modifier.weight(1f))
+            QuickActionItem(
+                Icons.Filled.PlayCircle, 
+                "Cast Sample", 
+                Color(0xFF2D1010), 
+                Color.Red, 
+                Modifier.weight(1f),
+                onClick = { onCastVideo("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", "Big Buck Bunny") }
+            )
+            QuickActionItem(
+                Icons.Filled.PhotoLibrary, 
+                "Cast Image", 
+                Color(0xFF10182D), 
+                Color(0xFF4285F4), 
+                Modifier.weight(1f),
+                onClick = { onCastVideo("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg", "Sample Image") }
+            )
         }
 
         Spacer(modifier = Modifier.height(120.dp))
@@ -509,13 +525,14 @@ private fun iconForBrand(brand: TVBrand): ImageVector {
 }
 
 @Composable
-fun ScreenMirroringCard() {
+fun ScreenMirroringCard(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(130.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(CardBackground)
+            .clickable { onClick() }
             .padding(24.dp)
     ) {
         Column {
@@ -541,13 +558,13 @@ fun ScreenMirroringCard() {
 }
 
 @Composable
-fun QuickActionItem(icon: ImageVector, title: String, bgColor: Color, iconColor: Color, modifier: Modifier = Modifier) {
+fun QuickActionItem(icon: ImageVector, title: String, bgColor: Color, iconColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     Box(
         modifier = modifier
             .height(120.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(CardBackground)
-            .clickable { }
+            .clickable { onClick() }
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {

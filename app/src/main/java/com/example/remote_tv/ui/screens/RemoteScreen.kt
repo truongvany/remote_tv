@@ -21,7 +21,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.content.Intent
 import com.example.remote_tv.data.model.AppThemeMode
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
@@ -38,7 +40,7 @@ private val navTabs = listOf(
     NavTab(Icons.Filled.SettingsRemote, "Remote"),
     NavTab(Icons.Filled.ViewModule, "Channels"),
     NavTab(Icons.Filled.Cast, "Cast"),
-    NavTab(Icons.Filled.Bookmark, "Watchlist"),
+    NavTab(Icons.Filled.PlayCircle, "Macro"),
     NavTab(Icons.Filled.Settings, "Settings"),
 )
 
@@ -53,6 +55,8 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     val connectionError by viewModel.connectionError.collectAsState()
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val settingsUiState by viewModel.settingsUiState.collectAsState()
+    
+    val context = LocalContext.current
 
     var lastConnectedKey by remember { mutableStateOf<String?>(null) }
 
@@ -138,8 +142,22 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                     },
                     onDeviceSelected = viewModel::connectToDevice,
                     onClearDiagnostics = viewModel::clearDiagnosticLogs,
+                    onScreenMirroringClick = {
+                        try {
+                            val intent = Intent("android.settings.CAST_SETTINGS")
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(android.provider.Settings.ACTION_CAST_SETTINGS)
+                                context.startActivity(intent)
+                            } catch (e2: Exception) {
+                                // Fallback if device doesn't support short intent
+                            }
+                        }
+                    },
+                    onCastVideo = viewModel::castVideo
                 )
-                3 -> WatchlistScreen()
+                3 -> MacroScreen(viewModel)
                 4 -> SettingsScreen(
                     settingsUiState = settingsUiState,
                     onThemeChanged = { isDarkMode ->

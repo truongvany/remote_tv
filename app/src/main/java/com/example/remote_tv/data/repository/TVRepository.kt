@@ -2,6 +2,8 @@ package com.example.remote_tv.data.repository
 
 import com.example.remote_tv.data.model.AppLaunchResult
 import com.example.remote_tv.data.model.PlaybackState
+import com.example.remote_tv.data.model.SavedDevice
+import com.example.remote_tv.data.model.TVApp
 import com.example.remote_tv.data.model.TVDevice
 import kotlinx.coroutines.flow.StateFlow
 
@@ -23,5 +25,17 @@ interface TVRepository {
     fun scheduleReconnect()
     suspend fun sendCommand(command: String): Boolean
     suspend fun launchApp(appId: String): AppLaunchResult
+
+    // Auto-Reconnect
+    suspend fun saveLastDevice(device: TVDevice)
+    suspend fun loadLastDevice(): SavedDevice?
+    suspend fun clearLastDevice()
+
+    // Wake-on-LAN
+    suspend fun wakeDevice(macAddress: String, broadcastIp: String): Boolean
+
+    // App List Sync
+    val installedApps: StateFlow<List<TVApp>>
+    suspend fun fetchInstalledApps()
 }
 

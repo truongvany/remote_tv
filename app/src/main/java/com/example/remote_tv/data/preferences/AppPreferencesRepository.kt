@@ -8,8 +8,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.remote_tv.data.model.AppSettings
 import com.example.remote_tv.data.model.AppThemeMode
+import com.example.remote_tv.data.model.SavedDevice
+import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.UserProfile
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.appPreferencesDataStore by preferencesDataStore(name = "app_preferences")
@@ -57,6 +60,67 @@ class AppPreferencesRepository(private val context: Context) {
         }
     }
 
+    // ----------------------------------------------------------------
+    // Last Device (Auto-Reconnect + Wake-on-LAN)
+    // ----------------------------------------------------------------
+
+    val lastDeviceFlow: Flow<SavedDevice?> = context.appPreferencesDataStore.data.map { prefs ->
+        val ip = prefs[PreferencesKeys.lastDeviceIp] ?: return@map null
+        val port = prefs[PreferencesKeys.lastDevicePort] ?: return@map null
+        val brandName = prefs[PreferencesKeys.lastDeviceBrand] ?: return@map null
+        val name = prefs[PreferencesKeys.lastDeviceName] ?: return@map null
+        val mac = prefs[PreferencesKeys.lastDeviceMac]
+        SavedDevice(
+            ip = ip,
+            port = port,
+            brand = runCatching { TVBrand.valueOf(brandName) }.getOrDefault(TVBrand.UNKNOWN),
+            name = name,
+            macAddress = mac,
+        )
+    }
+
+    suspend fun saveLastDevice(device: SavedDevice) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[PreferencesKeys.lastDeviceIp] = device.ip
+            prefs[PreferencesKeys.lastDevicePort] = device.port
+            prefs[PreferencesKeys.lastDeviceBrand] = device.brand.name
+            prefs[PreferencesKeys.lastDeviceName] = device.name
+            device.macAddress?.let { prefs[PreferencesKeys.lastDeviceMac] = it }
+        }
+    }
+
+    suspend fun clearLastDevice() {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs.remove(PreferencesKeys.lastDeviceIp)
+            prefs.remove(PreferencesKeys.lastDevicePort)
+            prefs.remove(PreferencesKeys.lastDeviceBrand)
+            prefs.remove(PreferencesKeys.lastDeviceName)
+            prefs.remove(PreferencesKeys.lastDeviceMac)
+        }
+    }
+
+    suspend fun loadLastDevice(): SavedDevice? = lastDeviceFlow.first()
+
+    suspend fun saveLastDeviceMac(mac: String) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[PreferencesKeys.lastDeviceMac] = mac
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Macros — stored as JSON string list
+    // ----------------------------------------------------------------
+
+    val macrosJsonFlow: Flow<String> = context.appPreferencesDataStore.data.map { prefs ->
+        prefs[PreferencesKeys.macrosJson] ?: "[]"
+    }
+
+    suspend fun saveMacrosJson(json: String) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[PreferencesKeys.macrosJson] = json
+        }
+    }
+
     private object PreferencesKeys {
         val themeMode: Preferences.Key<String> = stringPreferencesKey("theme_mode")
         val languageCode: Preferences.Key<String> = stringPreferencesKey("language_code")
@@ -65,6 +129,16 @@ class AppPreferencesRepository(private val context: Context) {
         val displayName: Preferences.Key<String> = stringPreferencesKey("display_name")
         val email: Preferences.Key<String> = stringPreferencesKey("email")
         val avatarSeed: Preferences.Key<Int> = intPreferencesKey("avatar_seed")
+
+        // Last device (auto-reconnect + WoL)
+        val lastDeviceIp: Preferences.Key<String> = stringPreferencesKey("last_device_ip")
+        val lastDevicePort: Preferences.Key<Int> = intPreferencesKey("last_device_port")
+        val lastDeviceBrand: Preferences.Key<String> = stringPreferencesKey("last_device_brand")
+        val lastDeviceName: Preferences.Key<String> = stringPreferencesKey("last_device_name")
+        val lastDeviceMac: Preferences.Key<String> = stringPreferencesKey("last_device_mac")
+
+        // Macros
+        val macrosJson: Preferences.Key<String> = stringPreferencesKey("macros_json")
     }
 }
 

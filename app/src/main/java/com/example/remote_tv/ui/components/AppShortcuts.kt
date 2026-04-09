@@ -14,11 +14,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.remote_tv.data.model.TVApp
 import com.example.remote_tv.ui.theme.ButtonBackground
 import com.example.remote_tv.ui.theme.TextSecondary
 
@@ -37,10 +40,24 @@ val defaultAppShortcuts = listOf(
 
 @Composable
 fun QuickLaunch(
-    apps: List<AppShortcut> = defaultAppShortcuts,
+    apps: List<TVApp> = emptyList(),
     isEnabled: Boolean = true,
     onLaunchApp: (String) -> Unit = {}
 ) {
+    val displayApps = if (apps.isEmpty()) {
+        defaultAppShortcuts
+    } else {
+        apps.take(3).map { tvApp ->
+            val defaultMatch = defaultAppShortcuts.find { it.packageId == tvApp.id || it.name.contains(tvApp.name, ignoreCase = true) }
+            defaultMatch?.copy(name = tvApp.name, packageId = tvApp.id) ?: AppShortcut(
+                name = tvApp.name.take(12),
+                packageId = tvApp.id,
+                textColor = Color.White,
+                accentTint = Color(0x11FFFFFF)
+            )
+        }
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -68,9 +85,11 @@ fun QuickLaunch(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            apps.forEach { app ->
+            displayApps.forEach { app ->
+                val iconUrl = apps.find { it.id == app.packageId }?.iconUrl
                 AppCard(
                     app = app,
+                    iconUrl = iconUrl,
                     isEnabled = isEnabled,
                     modifier = Modifier.weight(1f),
                     onClick = { onLaunchApp(app.packageId) }
@@ -83,6 +102,7 @@ fun QuickLaunch(
 @Composable
 fun AppCard(
     app: AppShortcut,
+    iconUrl: String? = null,
     isEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
@@ -103,14 +123,44 @@ fun AppCard(
                 .background(app.accentTint)
         )
 
-        when (app.name) {
-            "YouTube" -> {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(
-                        imageVector = Icons.Filled.SmartDisplay,
-                        contentDescription = "YouTube",
-                        tint = Color(0xFFFA3D3D)
+        // removed logic to find iconUrl here since passed by param
+
+        if (iconUrl != null) {
+            AsyncImage(
+                model = iconUrl,
+                contentDescription = app.name,
+                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            when (app.name) {
+                "YouTube", "YouTube TV" -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(
+                            imageVector = Icons.Filled.SmartDisplay,
+                            contentDescription = "YouTube",
+                            tint = Color(0xFFFA3D3D)
+                        )
+                        Text(
+                            text = "YouTube",
+                            color = app.textColor,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+
+                "Disney+" -> {
+                    Text(
+                        text = app.name,
+                        color = app.textColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        fontStyle = FontStyle.Italic
                     )
+                }
+
+                else -> {
                     Text(
                         text = app.name,
                         color = app.textColor,
@@ -118,25 +168,6 @@ fun AppCard(
                         fontWeight = FontWeight.Black
                     )
                 }
-            }
-
-            "Disney+" -> {
-                Text(
-                    text = app.name,
-                    color = app.textColor,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    fontStyle = FontStyle.Italic
-                )
-            }
-
-            else -> {
-                Text(
-                    text = app.name,
-                    color = app.textColor,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black
-                )
             }
         }
     }

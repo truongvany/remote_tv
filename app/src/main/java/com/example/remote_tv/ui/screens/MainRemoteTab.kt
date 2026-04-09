@@ -194,7 +194,13 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         ) {
             TopBar(
                 deviceName = deviceName,
-                onPower = { viewModel.powerToggle() },
+                onPower = {
+                    if (currentDevice != null) {
+                        viewModel.sendCommand("KEY_POWER")
+                    } else {
+                        viewModel.wakeLastDevice()
+                    }
+                },
                 onCastClick = { viewModel.selectTab(2) }
             )
 
@@ -256,7 +262,9 @@ fun MainRemoteTab(viewModel: TVViewModel) {
 
             Spacer(modifier = Modifier.height(28.dp))
 
+            val installedApps by viewModel.installedApps.collectAsState()
             QuickLaunch(
+                apps = installedApps,
                 isEnabled = currentDevice != null,
                 onLaunchApp = { viewModel.launchApp(it) }
             )

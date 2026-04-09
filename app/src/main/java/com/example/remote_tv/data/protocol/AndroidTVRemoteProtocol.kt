@@ -7,6 +7,8 @@ import java.io.DataOutputStream
 import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import javax.net.ssl.SSLSocket
+import com.example.remote_tv.data.debug.InAppDiagnostics
 
 /**
  * Android TV Remote Control Protocol (port 6466 / _androidtvremote2._tcp)
@@ -55,16 +57,32 @@ class AndroidTVRemoteProtocol : TVProtocol {
 
     override suspend fun connect(ip: String, port: Int): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d(TAG, "Connecting to Android TV Remote at $ip:$port")
-            val s = Socket()
+            InAppDiagnostics.info(TAG, "Connecting to Android TV Remote at $ip:$port")
+            
+            val s = if (port == 6466) {
+                // Sử dụng TLS cho port 6466 (v2 Remote Service)
+                InAppDiagnostics.info(TAG, "Using TLS for secure connection...")
+                val sslContext = AndroidTVCertificateManager.getSslContext()
+                val factory = sslContext.socketFactory
+                factory.createSocket() as SSLSocket
+            } else {
+                Socket()
+            }
+
             s.connect(InetSocketAddress(ip, port), 3000)
+            
+            if (s is SSLSocket) {
+                s.startHandshake()
+                InAppDiagnostics.info(TAG, "TLS Handshake successful!")
+            }
+
             socket = s
             outputStream = DataOutputStream(s.getOutputStream())
             inputStream = s.getInputStream()
             Log.d(TAG, "Connected to Android TV Remote!")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to connect: ${e.message}")
+            InAppDiagnostics.error(TAG, "Failed to connect: ${e.message}")
             false
         }
     }
