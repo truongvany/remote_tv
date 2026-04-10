@@ -3,6 +3,7 @@ package com.example.remote_tv.data.preferences
 import android.content.Context
 import android.util.Log
 import com.example.remote_tv.data.model.Macro
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
@@ -41,37 +42,31 @@ class MacroRepository(private val context: Context) {
     }
 
     suspend fun addMacro(macro: Macro) {
-        val current = prefs.macrosJsonFlow.map { jsonStr ->
-            try {
-                json.decodeFromString<List<SerializableMacro>>(jsonStr)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-        // Read once, append, save
-        val list = try {
-            json.decodeFromString<List<SerializableMacro>>(prefs.macrosJsonFlow.let {
-                var result = "[]"
-                // blocking collect pattern via flow.first() — call from suspend context
-                result
-            })
-        } catch (_: Exception) { emptyList() }
+        val current = loadSerializableMacros().toMutableList()
+        current.removeAll { it.id == macro.id }
+        current.add(macro.toSerializable())
+        prefs.saveMacrosJson(json.encodeToString(current))
+    }
 
-        // Simpler: re-read from macrosFlow, add, save
-        val newList = list.toMutableList()
-        newList.add(macro.toSerializable())
-        prefs.saveMacrosJson(json.encodeToString(newList))
+    suspend fun updateMacro(macro: Macro) {
+        addMacro(macro)
     }
 
     suspend fun removeMacro(macroId: String) {
-        val current = try {
-            json.decodeFromString<List<SerializableMacro>>(
-                prefs.macrosJsonFlow.let { "[]" }
-            )
-        } catch (_: Exception) { emptyList() }
+        val current = loadSerializableMacros()
 
         val filtered = current.filter { it.id != macroId }
         prefs.saveMacrosJson(json.encodeToString(filtered))
+    }
+
+    private suspend fun loadSerializableMacros(): List<SerializableMacro> {
+        val jsonStr = prefs.macrosJsonFlow.first()
+        return try {
+            json.decodeFromString(jsonStr)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to decode macros on load: ${e.message}")
+            emptyList()
+        }
     }
 
     // ----------------------------------------------------------------

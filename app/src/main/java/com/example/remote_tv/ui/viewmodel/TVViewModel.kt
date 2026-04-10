@@ -32,16 +32,27 @@ import com.example.remote_tv.data.preferences.MacroRepository
 import com.example.remote_tv.data.repository.TVRepository
 import com.example.remote_tv.data.repository.TVRepositoryImpl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
+
+data class MacroRunState(
+    val runningMacroId: String? = null,
+    val currentStep: Int = 0,
+    val totalSteps: Int = 0,
+    val currentCommand: String? = null,
+    val isCancelling: Boolean = false,
+)
 
 class TVViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -68,6 +79,10 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _macros = MutableStateFlow<List<Macro>>(emptyList())
     val macros: StateFlow<List<Macro>> = _macros.asStateFlow()
+
+    private val _macroRunState = MutableStateFlow(MacroRunState())
+    val macroRunState: StateFlow<MacroRunState> = _macroRunState.asStateFlow()
+    private var macroExecutionJob: Job? = null
 
     private val _isWaking = MutableStateFlow(false)
     val isWaking: StateFlow<Boolean> = _isWaking.asStateFlow()
@@ -343,27 +358,173 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     // ----------------------------------------------------------------
 
     fun executeMacro(macro: Macro) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(actionMessage = "Running: ${macro.name}") }
-            for (command in macro.commands) {
-                sendCommandInternal(command)
-                delay(macro.delayMs)
-            }
-            _uiState.update { it.copy(actionMessage = "${macro.name} done") }
+        if (currentDevice.value == null) {
+            _uiState.update { it.copy(actionMessage = "Connect TV before running macro") }
+            return
         }
+
+        if (macroExecutionJob?.isActive == true) {
+            _uiState.update { it.copy(actionMessage = "A macro is already running") }
+            return
+        }
+
+        val normalizedCommands = normalizeMacroCommands(macro.commands)
+        if (normalizedCommands.isEmpty()) {
+            _uiState.update { it.copy(actionMessage = "Macro has no valid commands") }
+            return
+        }
+
+        macroExecutionJob = viewModelScope.launch {
+            _macroRunState.value = MacroRunState(
+                runningMacroId = macro.id,
+                totalSteps = normalizedCommands.size,
+            )
+            _uiState.update { it.copy(actionMessage = "Running: ${macro.name}") }
+
+            val stepDelay = macro.delayMs.coerceIn(50L, 5_000L)
+
+            for ((index, command) in normalizedCommands.withIndex()) {
+                if (!isActive) {
+                    return@launch
+                }
+
+                _macroRunState.value = MacroRunState(
+                    runningMacroId = macro.id,
+                    currentStep = index + 1,
+                    totalSteps = normalizedCommands.size,
+                    currentCommand = command,
+                )
+
+                val sent = sendCommandInternal(command)
+                if (!sent) {
+                    _uiState.update {
+                        it.copy(actionMessage = "Macro stopped at step ${index + 1}: $command")
+                    }
+                    return@launch
+                }
+
+                if (index < normalizedCommands.lastIndex) {
+                    delay(stepDelay)
+                }
+            }
+
+            _uiState.update { it.copy(actionMessage = "${macro.name} done") }
+        }.also { job ->
+            job.invokeOnCompletion {
+                if (macroExecutionJob == job) {
+                    macroExecutionJob = null
+                }
+                _macroRunState.value = MacroRunState()
+            }
+        }
+    }
+
+    fun stopMacroExecution() {
+        val activeJob = macroExecutionJob
+        if (activeJob == null || !activeJob.isActive) {
+            return
+        }
+
+        _macroRunState.update { it.copy(isCancelling = true) }
+        activeJob.cancel()
+        _uiState.update { it.copy(actionMessage = "Macro stopped") }
     }
 
     fun addMacro(macro: Macro) {
         viewModelScope.launch {
-            val updated = _macros.value.toMutableList().also { it.add(macro) }
+            val normalizedName = macro.name.trim()
+            val normalizedCommands = normalizeMacroCommands(macro.commands)
+            if (normalizedName.isBlank() || normalizedCommands.isEmpty()) {
+                _uiState.update { it.copy(actionMessage = "Macro name and commands are required") }
+                return@launch
+            }
+
+            val normalizedMacro = macro.copy(
+                name = normalizedName,
+                commands = normalizedCommands,
+                delayMs = macro.delayMs.coerceIn(50L, 5_000L),
+            )
+
+            val exists = _macros.value.any { it.id == normalizedMacro.id }
+            val updated = if (exists) {
+                _macros.value.map { item -> if (item.id == normalizedMacro.id) normalizedMacro else item }
+            } else {
+                _macros.value + normalizedMacro
+            }
+
             macroRepository.saveMacros(updated)
+            _uiState.update {
+                it.copy(actionMessage = if (exists) "Macro updated" else "Macro saved")
+            }
         }
+    }
+
+    fun updateMacro(macro: Macro) {
+        addMacro(macro)
+    }
+
+    fun duplicateMacro(source: Macro) {
+        val duplicate = source.copy(
+            id = UUID.randomUUID().toString(),
+            name = buildDuplicateMacroName(source.name),
+        )
+        addMacro(duplicate)
     }
 
     fun removeMacro(macroId: String) {
         viewModelScope.launch {
             val updated = _macros.value.filter { it.id != macroId }
             macroRepository.saveMacros(updated)
+            _uiState.update { it.copy(actionMessage = "Macro deleted") }
+        }
+    }
+
+    private fun buildDuplicateMacroName(baseName: String): String {
+        val existingNames = _macros.value.map { it.name.lowercase() }.toSet()
+        val baseCopy = "${baseName.trim()} Copy".trim()
+        if (baseCopy.lowercase() !in existingNames) {
+            return baseCopy
+        }
+
+        var index = 2
+        while (true) {
+            val candidate = "$baseCopy $index"
+            if (candidate.lowercase() !in existingNames) {
+                return candidate
+            }
+            index++
+        }
+    }
+
+    private fun normalizeMacroCommands(commands: List<String>): List<String> {
+        return commands.mapNotNull { raw ->
+            val command = raw.trim()
+            if (command.isBlank()) {
+                return@mapNotNull null
+            }
+
+            when {
+                command.startsWith("TEXT:", ignoreCase = true) -> {
+                    val payload = command.substringAfter(':').trim()
+                    if (payload.isBlank()) null else "TEXT:$payload"
+                }
+
+                command.startsWith("OPEN_URL:", ignoreCase = true) -> {
+                    val payload = command.substringAfter(':').trim()
+                    if (payload.isBlank()) null else "OPEN_URL:$payload"
+                }
+
+                command.startsWith("SEARCH_QUERY:", ignoreCase = true) -> {
+                    val payload = command.substringAfter(':').trim()
+                    if (payload.isBlank()) null else "SEARCH_QUERY:$payload"
+                }
+
+                command.startsWith("am ", ignoreCase = true) ||
+                    command.startsWith("cmd ", ignoreCase = true) ||
+                    command.startsWith("monkey ", ignoreCase = true) -> command
+
+                else -> command.uppercase()
+            }
         }
     }
 
@@ -532,6 +693,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        macroExecutionJob?.cancel()
         repository.stopDiscovery()
         castManager.release()
     }

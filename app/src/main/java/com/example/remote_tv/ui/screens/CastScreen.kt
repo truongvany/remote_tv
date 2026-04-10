@@ -286,12 +286,13 @@ private fun CastSessionStatusPill(isActive: Boolean, status: String) {
 fun ScanningAnimationArea() {
     val infiniteTransition = rememberInfiniteTransition(label = "scanning")
     val pulseColor = MaterialTheme.colorScheme.primary
+    val pulseDurationMs = 2200
     
     val scale1 by infiniteTransition.animateFloat(
         initialValue = 0.5f,
         targetValue = 1.5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
+            animation = tween(pulseDurationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ), label = "scale1"
     )
@@ -300,9 +301,49 @@ fun ScanningAnimationArea() {
         initialValue = 1f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
+            animation = tween(pulseDurationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ), label = "alpha1"
+    )
+
+    val scale2 by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset(pulseDurationMs / 3)
+        ), label = "scale2"
+    )
+
+    val alpha2 by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset(pulseDurationMs / 3)
+        ), label = "alpha2"
+    )
+
+    val scale3 by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset((pulseDurationMs / 3) * 2)
+        ), label = "scale3"
+    )
+
+    val alpha3 by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset((pulseDurationMs / 3) * 2)
+        ), label = "alpha3"
     )
 
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
@@ -310,6 +351,16 @@ fun ScanningAnimationArea() {
             drawCircle(
                 color = pulseColor.copy(alpha = alpha1 * 0.55f),
                 radius = (size.minDimension / 2) * scale1,
+                style = Stroke(width = 2.dp.toPx())
+            )
+            drawCircle(
+                color = pulseColor.copy(alpha = alpha2 * 0.42f),
+                radius = (size.minDimension / 2) * scale2,
+                style = Stroke(width = 2.dp.toPx())
+            )
+            drawCircle(
+                color = pulseColor.copy(alpha = alpha3 * 0.32f),
+                radius = (size.minDimension / 2) * scale3,
                 style = Stroke(width = 2.dp.toPx())
             )
         }
