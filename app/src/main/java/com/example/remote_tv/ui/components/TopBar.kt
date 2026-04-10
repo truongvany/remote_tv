@@ -13,7 +13,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_tv.ui.theme.OrangeAccent
 
 @Composable
 fun TopBar(
@@ -24,7 +23,7 @@ fun TopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 16.dp), // Giảm padding vertical
+            .padding(horizontal = 8.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -32,8 +31,8 @@ fun TopBar(
             Icon(
                 Icons.Filled.PowerSettingsNew,
                 contentDescription = "Power",
-                tint = OrangeAccent,
-                modifier = Modifier.size(28.dp) // Giảm từ 32.dp
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
             )
         }
 
@@ -43,18 +42,18 @@ fun TopBar(
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.sp
             ),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
-            fontSize = 16.sp // Giảm từ 18.sp
+            fontSize = 16.sp
         )
 
         IconButton(onClick = onCastClick) {
             Icon(
                 Icons.Filled.Cast,
                 contentDescription = "Connect",
-                tint = Color(0xFFADAAAA),
-                modifier = Modifier.size(28.dp) // Giảm từ 32.dp
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                modifier = Modifier.size(28.dp)
             )
         }
     }

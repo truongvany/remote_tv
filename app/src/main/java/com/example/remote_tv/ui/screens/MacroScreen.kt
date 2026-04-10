@@ -25,9 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.remote_tv.data.model.Macro
-import com.example.remote_tv.ui.theme.OrangeAccent
-import com.example.remote_tv.ui.theme.CardBackground
-import com.example.remote_tv.ui.theme.TextSecondary
 import com.example.remote_tv.ui.viewmodel.TVViewModel
 import java.util.UUID
 
@@ -54,14 +51,14 @@ fun MacroScreen(viewModel: TVViewModel) {
             Column {
                 Text(
                     text = "MACRO KEYS",
-                    color = OrangeAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp,
                     letterSpacing = 1.sp
                 )
                 Text(
                     text = "One-tap command sequences",
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onTertiary,
                     fontSize = 12.sp
                 )
             }
@@ -69,9 +66,9 @@ fun MacroScreen(viewModel: TVViewModel) {
                 onClick = { showCreateDialog = true },
                 modifier = Modifier
                     .size(44.dp)
-                    .background(OrangeAccent, RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Macro", tint = Color.Black)
+                Icon(Icons.Filled.Add, contentDescription = "Add Macro", tint = MaterialTheme.colorScheme.onPrimary)
             }
         }
 
@@ -80,7 +77,7 @@ fun MacroScreen(viewModel: TVViewModel) {
         // Built-in presets
         Text(
             "PRESETS",
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onTertiary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp
@@ -105,7 +102,7 @@ fun MacroScreen(viewModel: TVViewModel) {
         if (macros.isNotEmpty()) {
             Text(
                 "MY MACROS",
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onTertiary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
@@ -146,10 +143,6 @@ fun MacroScreen(viewModel: TVViewModel) {
     }
 }
 
-// ----------------------------------------------------------------
-// MacroCard
-// ----------------------------------------------------------------
-
 @Composable
 private fun MacroCard(
     macro: Macro,
@@ -162,8 +155,8 @@ private fun MacroCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(CardBackground)
-            .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.tertiary)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
             .clickable(enabled = isEnabled) { onRun() }
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
@@ -172,13 +165,13 @@ private fun MacroCard(
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(OrangeAccent.copy(alpha = 0.15f), CircleShape),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.PlayCircle,
                     contentDescription = null,
-                    tint = if (isEnabled) OrangeAccent else Color.Gray,
+                    tint = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -186,35 +179,30 @@ private fun MacroCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = macro.name,
-                    color = if (isEnabled) Color.White else Color.Gray,
+                    color = if (isEnabled) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.5f),
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
                 )
                 Text(
                     text = "${macro.commands.size} commands · ${macro.delayMs}ms delay",
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.6f),
                     fontSize = 11.sp
                 )
-                // Preview lệnh
                 Text(
                     text = macro.commands.take(3).joinToString(" → "),
-                    color = Color(0xFF555555),
+                    color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.3f),
                     fontSize = 10.sp,
                     maxLines = 1
                 )
             }
             if (!isBuiltIn) {
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete", tint = Color(0xFF555555))
+                    Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.3f))
                 }
             }
         }
     }
 }
-
-// ----------------------------------------------------------------
-// Create Macro Dialog
-// ----------------------------------------------------------------
 
 @Composable
 private fun CreateMacroDialog(
@@ -227,27 +215,27 @@ private fun CreateMacroDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF121212),
+        containerColor = MaterialTheme.colorScheme.surface,
         title = {
-            Text("Create Macro", color = Color.White, fontWeight = FontWeight.Bold)
+            Text("Create Macro", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = macroName,
                     onValueChange = { macroName = it },
-                    label = { Text("Macro name", color = TextSecondary) },
+                    label = { Text("Macro name") },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OrangeAccent,
-                        unfocusedBorderColor = Color(0xFF333333),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     "Commands (one per line):",
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
                 OutlinedTextField(
@@ -256,27 +244,27 @@ private fun CreateMacroDialog(
                     minLines = 4,
                     maxLines = 8,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OrangeAccent,
-                        unfocusedBorderColor = Color(0xFF333333),
-                        focusedTextColor = Color(0xFFE0E0E0),
-                        unfocusedTextColor = Color(0xFFB0B0B0),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     "Examples: KEY_HOME, KEY_BACK, KEY_VOL_UP, TEXT:hello, KEY_ENTER",
-                    color = Color(0xFF555555),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     fontSize = 10.sp
                 )
                 OutlinedTextField(
                     value = delayMs,
                     onValueChange = { delayMs = it.filter { c -> c.isDigit() } },
-                    label = { Text("Delay between commands (ms)", color = TextSecondary) },
+                    label = { Text("Delay between commands (ms)") },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OrangeAccent,
-                        unfocusedBorderColor = Color(0xFF333333),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -293,22 +281,18 @@ private fun CreateMacroDialog(
                         onConfirm(macroName.trim(), commands, delay)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Create", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Create", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextSecondary)
+                Text("Cancel", color = MaterialTheme.colorScheme.primary)
             }
         }
     )
 }
-
-// ----------------------------------------------------------------
-// Empty State
-// ----------------------------------------------------------------
 
 @Composable
 private fun EmptyMacrosHint() {
@@ -316,31 +300,27 @@ private fun EmptyMacrosHint() {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF0C0C0C))
-            .border(1.dp, Color(0xFF1F1F1F), RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.secondary)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.TouchApp, contentDescription = null, tint = Color(0xFF333333), modifier = Modifier.size(36.dp))
+            Icon(Icons.Filled.TouchApp, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), modifier = Modifier.size(36.dp))
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "No macros yet",
-                color = Color(0xFF555555),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 fontWeight = FontWeight.Bold
             )
             Text(
                 "Tap + to create a command sequence",
-                color = Color(0xFF333333),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                 fontSize = 12.sp
             )
         }
     }
 }
-
-// ----------------------------------------------------------------
-// Built-in Presets
-// ----------------------------------------------------------------
 
 private fun builtInPresets(): List<Macro> = listOf(
     Macro(

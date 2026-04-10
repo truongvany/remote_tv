@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -175,12 +174,6 @@ fun MainRemoteTab(viewModel: TVViewModel) {
     }
 
     val uiState by viewModel.uiState.collectAsState()
-
-    LaunchedEffect(uiState.actionMessage) {
-        val message = uiState.actionMessage ?: return@LaunchedEffect
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        viewModel.consumeActionMessage()
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(

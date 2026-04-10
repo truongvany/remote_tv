@@ -9,8 +9,10 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.URLDecoder
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.charset.StandardCharsets
 import java.text.Normalizer
 import java.security.Signature as JSignature
 
@@ -177,6 +179,30 @@ class AdbProtocol : TVProtocol {
     override suspend fun sendCommand(command: String): Boolean = withContext(Dispatchers.IO) {
         if (!isConnected) return@withContext false
 
+        if (command.startsWith("OPEN_URL:")) {
+            val payload = command.removePrefix("OPEN_URL:").trim()
+            if (payload.isBlank()) {
+                InAppDiagnostics.warn(TAG, "ADB OPEN_URL ignored: empty payload")
+                return@withContext false
+            }
+
+            val parts = payload.split("|", limit = 2)
+            val decodedUrl = runCatching {
+                URLDecoder.decode(parts.first(), StandardCharsets.UTF_8.toString())
+            }.getOrNull()?.trim().orEmpty()
+
+            val decodedMime = runCatching {
+                URLDecoder.decode(parts.getOrNull(1).orEmpty(), StandardCharsets.UTF_8.toString())
+            }.getOrDefault("*/*").trim().ifBlank { "*/*" }
+
+            if (decodedUrl.isBlank()) {
+                InAppDiagnostics.warn(TAG, "ADB OPEN_URL ignored: invalid URL payload")
+                return@withContext false
+            }
+
+            return@withContext openUrlOnTv(decodedUrl, decodedMime)
+        }
+
         if (command.startsWith("SEARCH_QUERY:")) {
             val query = command.removePrefix("SEARCH_QUERY:").trim()
             if (query.isBlank()) {
@@ -212,32 +238,38 @@ class AdbProtocol : TVProtocol {
                 val pasted = sendTextViaClipboard(normalized)
                 if (pasted) {
                     InAppDiagnostics.info(TAG, "ADB text sent via clipboard fallback")
+                    return@withContext true
                 } else {
                     InAppDiagnostics.error(TAG, "ADB text failed on both input and clipboard paths")
                 }
-                return@withContext pasted
-            }
 
-            val sentByCmdInput = sendTextViaCmdInput(normalized)
-            if (sentByCmdInput) {
-                InAppDiagnostics.info(TAG, "ADB text sent via cmd input (unicode path)")
-                return@withContext true
+                val sentByCmdInput = sendTextViaCmdInput(normalized)
+                if (sentByCmdInput) {
+                    InAppDiagnostics.info(TAG, "ADB text sent via cmd input final fallback")
+                }
+                return@withContext sentByCmdInput
             }
 
             val pasted = sendTextViaClipboard(normalized)
             if (pasted) {
-                InAppDiagnostics.info(TAG, "ADB text sent via clipboard (unicode path)")
+                InAppDiagnostics.info(TAG, "ADB text sent via robust clipboard (unicode path)")
                 return@withContext true
             }
 
-            InAppDiagnostics.warn(TAG, "ADB TEXT clipboard path failed for unicode, fallback to input text")
             val injected = sendTextByInputCommand(normalized)
             if (injected) {
                 InAppDiagnostics.info(TAG, "ADB text sent via input text unicode fallback")
-            } else {
-                InAppDiagnostics.error(TAG, "ADB text failed on both clipboard and input paths")
+                return@withContext true
             }
-            return@withContext injected
+
+            val sentByCmdInput = sendTextViaCmdInput(normalized)
+            if (sentByCmdInput) {
+                InAppDiagnostics.info(TAG, "ADB text sent via cmd input unicode final fallback")
+                return@withContext true
+            }
+
+            InAppDiagnostics.error(TAG, "ADB text failed on clipboard + input + cmd-input unicode paths")
+            return@withContext false
         }
 
         val keyCode = keyMap[command] ?: run {
@@ -273,7 +305,8 @@ class AdbProtocol : TVProtocol {
     }
 
     private suspend fun sendTextViaCmdInput(text: String): Boolean {
-        val chunks = text.chunked(24)
+        val encoded = encodeForAndroidInputText(text)
+        val chunks = encoded.chunked(32)
         chunks.forEachIndexed { index, chunk ->
             val escaped = escapeForShellDoubleQuoted(chunk)
             val sent = sendShellCommand("cmd input text \"$escaped\"\n")
@@ -292,12 +325,32 @@ class AdbProtocol : TVProtocol {
 
     private fun sendTextViaClipboard(text: String): Boolean {
         val escaped = escapeForShellDoubleQuoted(text)
-        val setClipboard = sendShellCommand("cmd clipboard set text \"$escaped\"\n")
+
+        val setClipboardCommands = listOf(
+            "cmd clipboard set text \"$escaped\"\n",
+            "cmd clipboard set \"$escaped\"\n",
+            // Older Android builds may only expose clipboard service call variants.
+            "service call clipboard 2 i32 0 s16 \"com.android.shell\" s16 \"$escaped\"\n",
+            "service call clipboard 1 i32 0 s16 \"com.android.shell\" s16 \"$escaped\"\n",
+        )
+
+        val setClipboard = setClipboardCommands.any { cmd -> sendShellCommand(cmd) }
         if (!setClipboard) {
+            InAppDiagnostics.warn(TAG, "ADB clipboard set failed on all known commands")
             return false
         }
 
-        return sendShellCommand("input keyevent 279\n")
+        val pasteCommands = listOf(
+            "input keyevent 279\n",          // KEYCODE_PASTE
+            "input keycombination 113 50\n", // CTRL + V
+            "input keyevent 50\n",           // KEYCODE_V fallback
+        )
+
+        val pasted = pasteCommands.any { cmd -> sendShellCommand(cmd) }
+        if (!pasted) {
+            InAppDiagnostics.warn(TAG, "ADB clipboard paste failed on all known key paths")
+        }
+        return pasted
     }
 
     private fun escapeForShellDoubleQuoted(value: String): String {
@@ -365,6 +418,36 @@ class AdbProtocol : TVProtocol {
             TAG,
             "ADB search intent failed for query='${query.take(32)}'"
         )
+        return false
+    }
+
+    private fun openUrlOnTv(url: String, mimeType: String): Boolean {
+        val escapedUrl = escapeForShellDoubleQuoted(url)
+        val escapedMime = escapeForShellDoubleQuoted(mimeType)
+        val isImageOrHtml = mimeType.startsWith("image/", ignoreCase = true) ||
+            mimeType.equals("text/html", ignoreCase = true)
+
+        val attempts = if (isImageOrHtml) {
+            listOf(
+                "am start -a android.intent.action.VIEW -d \"$escapedUrl\"\n",
+                "am start -a android.intent.action.VIEW -d \"$escapedUrl\" -t \"$escapedMime\"\n",
+            )
+        } else {
+            listOf(
+                "am start -a android.intent.action.VIEW -d \"$escapedUrl\" -t \"$escapedMime\"\n",
+                "am start -a android.intent.action.VIEW -d \"$escapedUrl\"\n",
+            )
+        }
+
+        attempts.forEachIndexed { index, shell ->
+            val result = sendShellCommandDetailed(shell)
+            if (result.success) {
+                InAppDiagnostics.info(TAG, "ADB OPEN_URL success attempt=${index + 1} mime=$mimeType")
+                return true
+            }
+        }
+
+        InAppDiagnostics.warn(TAG, "ADB OPEN_URL failed url=${url.take(96)} mime=$mimeType")
         return false
     }
 

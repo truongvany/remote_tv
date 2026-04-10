@@ -20,9 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.remote_tv.data.model.TVDevice
-import com.example.remote_tv.ui.theme.ButtonBackground
-import com.example.remote_tv.ui.theme.CardBackground
-import com.example.remote_tv.ui.theme.OrangeAccent
 
 @Composable
 fun DeviceSelectionDialog(
@@ -39,7 +36,7 @@ fun DeviceSelectionDialog(
         Surface(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             shape = RoundedCornerShape(24.dp),
-            color = CardBackground
+            color = MaterialTheme.colorScheme.surface
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -48,15 +45,15 @@ fun DeviceSelectionDialog(
                 Text(
                     "Connect to TV",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (!showManualFields) {
                     if (devices.isEmpty()) {
-                        CircularProgressIndicator(color = OrangeAccent, modifier = Modifier.size(30.dp))
-                        Text("Searching...", color = Color.Gray, modifier = Modifier.padding(8.dp))
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+                        Text("Searching...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
                     } else {
                         LazyColumn(
                             modifier = Modifier.heightIn(max = 200.dp),
@@ -66,13 +63,13 @@ fun DeviceSelectionDialog(
                         }
                     }
                     TextButton(onClick = { showManualFields = true }) {
-                        Text("Enter IP Manually", color = OrangeAccent)
+                        Text("Enter IP Manually", color = MaterialTheme.colorScheme.primary)
                     }
                 } else {
                     // Emulator hint
                     Text(
                         "Emulator: IP = 10.0.2.2, Port = 6466",
-                        color = OrangeAccent, fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary, fontSize = 11.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -82,11 +79,11 @@ fun DeviceSelectionDialog(
                         label = { Text("IP Address") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = OrangeAccent,
-                            focusedLabelColor = OrangeAccent,
-                            unfocusedLabelColor = Color.Gray,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                         )
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -96,29 +93,29 @@ fun DeviceSelectionDialog(
                         label = { Text("Port") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = OrangeAccent,
-                            focusedLabelColor = OrangeAccent,
-                            unfocusedLabelColor = Color.Gray,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                         )
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = { onManualConnect(ipAddress, port.toIntOrNull() ?: 6466) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Connect Now")
+                        Text("Connect Now", color = MaterialTheme.colorScheme.onPrimary)
                     }
                     TextButton(onClick = { showManualFields = false }) {
-                        Text("Back to Scanning", color = Color.Gray)
+                        Text("Back to Scanning", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = Color.Red)
+                    Text("Cancel", color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -131,17 +128,16 @@ fun DeviceItem(device: TVDevice, onClick: (TVDevice) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(ButtonBackground)
+            .background(MaterialTheme.colorScheme.secondary)
             .clickable { onClick(device) }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Filled.Tv, contentDescription = null, tint = OrangeAccent)
+        Icon(Icons.Filled.Tv, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(device.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text("${device.ipAddress}:${device.port}", color = Color.Gray, fontSize = 12.sp)
+            Text(device.name, color = MaterialTheme.colorScheme.onSecondary, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text("${device.ipAddress}:${device.port}", color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f), fontSize = 12.sp)
         }
     }
 }
-

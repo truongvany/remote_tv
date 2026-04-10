@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,8 +23,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.remote_tv.data.model.TVApp
-import com.example.remote_tv.ui.theme.ButtonBackground
-import com.example.remote_tv.ui.theme.TextSecondary
 
 data class AppShortcut(
     val name: String,
@@ -33,9 +32,9 @@ data class AppShortcut(
 )
 
 val defaultAppShortcuts = listOf(
-    AppShortcut("NETFLIX", "com.netflix.ninja", Color(0xFFE50914), Color(0x33FF0000)),
-    AppShortcut("YouTube", "com.google.android.youtube.tv", Color.White, Color(0x33FF4E4E)),
-    AppShortcut("Disney+", "com.disney.disneyplus", Color(0xFF70A9FF), Color(0x332F7CFF)),
+    AppShortcut("NETFLIX", "com.netflix.ninja", Color(0xFFE50914), Color(0x11FF0000)),
+    AppShortcut("YouTube", "com.google.android.youtube.tv", Color(0xFFFA3D3D), Color(0x11FF4E4E)),
+    AppShortcut("Disney+", "com.disney.disneyplus", Color(0xFF2F7CFF), Color(0x112F7CFF)),
 )
 
 @Composable
@@ -52,8 +51,8 @@ fun QuickLaunch(
             defaultMatch?.copy(name = tvApp.name, packageId = tvApp.id) ?: AppShortcut(
                 name = tvApp.name.take(12),
                 packageId = tvApp.id,
-                textColor = Color.White,
-                accentTint = Color(0x11FFFFFF)
+                textColor = MaterialTheme.colorScheme.onSecondary,
+                accentTint = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.05f)
             )
         }
     }
@@ -65,8 +64,8 @@ fun QuickLaunch(
         ) {
             Text(
                 text = "QUICK LAUNCH",
-                color = TextSecondary,
-                fontSize = 10.sp, // Reduced from 11.sp
+                color = MaterialTheme.colorScheme.onTertiary,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.2.sp
             )
@@ -75,15 +74,15 @@ fun QuickLaunch(
                 modifier = Modifier
                     .weight(1f)
                     .height(1.dp)
-                    .background(Color(0xFF1D1D1D))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp)) // Reduced from 16.dp
+        Spacer(modifier = Modifier.height(12.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp) // Reduced from 12.dp
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             displayApps.forEach { app ->
                 val iconUrl = apps.find { it.id == app.packageId }?.iconUrl
@@ -110,10 +109,10 @@ fun AppCard(
     Box(
         modifier = modifier
             .alpha(if (isEnabled) 1f else 0.45f)
-            .height(64.dp) // Reduced from 74.dp
-            .clip(RoundedCornerShape(16.dp)) // Reduced from 18.dp
-            .background(ButtonBackground)
-            .border(1.dp, Color(0xFF252525), RoundedCornerShape(16.dp))
+            .height(64.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.secondary)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
             .clickable(enabled = isEnabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -127,7 +126,7 @@ fun AppCard(
             AsyncImage(
                 model = iconUrl,
                 contentDescription = app.name,
-                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)), // Reduced size from 40.dp
+                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
                 contentScale = ContentScale.Fit
             )
         } else {
@@ -138,12 +137,12 @@ fun AppCard(
                             imageVector = Icons.Filled.SmartDisplay,
                             contentDescription = "YouTube",
                             tint = Color(0xFFFA3D3D),
-                            modifier = Modifier.size(20.dp) // Added size constraint
+                            modifier = Modifier.size(20.dp)
                         )
                         Text(
                             text = "YouTube",
-                            color = app.textColor,
-                            fontSize = 13.sp, // Reduced from 15.sp
+                            color = if (MaterialTheme.colorScheme.background == Color(0xFFF5F5F5)) Color(0xFF333333) else app.textColor,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Black
                         )
                     }
@@ -152,18 +151,27 @@ fun AppCard(
                 "Disney+" -> {
                     Text(
                         text = app.name,
-                        color = app.textColor,
-                        fontSize = 13.sp, // Reduced from 15.sp
+                        color = if (MaterialTheme.colorScheme.background == Color(0xFFF5F5F5)) Color(0xFF2F7CFF) else app.textColor,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Black,
                         fontStyle = FontStyle.Italic
+                    )
+                }
+
+                "NETFLIX" -> {
+                    Text(
+                        text = app.name,
+                        color = if (MaterialTheme.colorScheme.background == Color(0xFFF5F5F5)) Color(0xFFE50914) else app.textColor,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black
                     )
                 }
 
                 else -> {
                     Text(
                         text = app.name,
-                        color = app.textColor,
-                        fontSize = 13.sp, // Reduced from 15.sp
+                        color = MaterialTheme.colorScheme.onSecondary,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Black
                     )
                 }

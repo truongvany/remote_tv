@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,14 +21,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_tv.ui.theme.OrangeAccent
 
 @Composable
 fun DPad(onDirection: (String) -> Unit, onOk: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(280.dp) // Giảm từ 318.dp
-            .background(Color(0xFF0F0F0F), CircleShape)
+            .size(280.dp)
+            .background(MaterialTheme.colorScheme.tertiary, CircleShape)
             .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -37,12 +37,14 @@ fun DPad(onDirection: (String) -> Unit, onOk: () -> Unit) {
                 .shadow(10.dp, CircleShape)
                 .background(
                     brush = Brush.radialGradient(
-                        colors = listOf(OrangeAccent, Color(0xFFFF5D1F))
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
                     ),
                     shape = CircleShape
                 )
         ) {
-            // Giảm kích thước mũi tên và khoảng cách
             DirectionIcon(Icons.Filled.KeyboardArrowUp, Alignment.TopCenter, Modifier.padding(top = 18.dp))
             DirectionIcon(Icons.Filled.KeyboardArrowDown, Alignment.BottomCenter, Modifier.padding(bottom = 18.dp))
             DirectionIcon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, Alignment.CenterStart, Modifier.padding(start = 18.dp))
@@ -82,14 +84,14 @@ fun DPad(onDirection: (String) -> Unit, onOk: () -> Unit) {
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(96.dp) // Giảm từ 112.dp
-                    .background(Color(0xFFB34A2A), CircleShape)
+                    .size(96.dp)
+                    .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), CircleShape)
                     .clickable { onOk() },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "OK",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 18.sp
                 )
@@ -107,7 +109,7 @@ private fun BoxScope.DirectionIcon(
     Icon(
         icon,
         contentDescription = null,
-        tint = Color(0xFF5D2817),
-        modifier = modifier.align(alignment).size(36.dp) // Giảm từ 40.dp
+        tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+        modifier = modifier.align(alignment).size(36.dp)
     )
 }

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,9 +30,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_tv.ui.theme.ButtonBackground
-import com.example.remote_tv.ui.theme.OrangeAccent
-import com.example.remote_tv.ui.theme.TextSecondary
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -138,21 +136,21 @@ fun RemoteIconButton(
         Box(
             modifier = Modifier
                 .size(74.dp)
-                .background(ButtonBackground, RoundedCornerShape(20.dp))
-                .border(1.dp, Color(0xFF262626), RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(20.dp))
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
                 .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 icon,
                 contentDescription = label,
-                tint = Color(0xFFA8A8A8),
+                tint = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f),
                 modifier = Modifier.size(28.dp)
             )
         }
         Text(
             text = label,
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onTertiary,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp
@@ -180,8 +178,8 @@ private fun ConnectedDualButton(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(132.dp)
-                .background(ButtonBackground, RoundedCornerShape(22.dp))
-                .border(1.dp, Color(0xFF262626), RoundedCornerShape(22.dp)),
+                .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(22.dp))
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(22.dp)),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Box(
@@ -195,12 +193,12 @@ private fun ConnectedDualButton(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(topIcon, contentDescription = "$title up", tint = Color(0xFFA8A8A8), modifier = Modifier.size(24.dp))
-                        Text(topLabel, color = Color(0xFFA8A8A8), fontWeight = FontWeight.Bold)
+                        Icon(topIcon, contentDescription = "$title up", tint = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f), modifier = Modifier.size(24.dp))
+                        Text(topLabel, color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
                     }
                 }
 
-                HorizontalDivider(color = Color(0xFF242424), thickness = 1.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), thickness = 1.dp)
 
                 Box(
                     modifier = Modifier
@@ -213,8 +211,8 @@ private fun ConnectedDualButton(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(bottomIcon, contentDescription = "$title down", tint = Color(0xFFA8A8A8), modifier = Modifier.size(24.dp))
-                        Text(bottomLabel, color = Color(0xFFA8A8A8), fontWeight = FontWeight.Bold)
+                        Icon(bottomIcon, contentDescription = "$title down", tint = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f), modifier = Modifier.size(24.dp))
+                        Text(bottomLabel, color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -222,7 +220,7 @@ private fun ConnectedDualButton(
 
         Text(
             text = title,
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onTertiary,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp,
@@ -249,7 +247,7 @@ fun VoiceButton(
         modifier = Modifier
             .size(76.dp)
             .shadow(12.dp, CircleShape)
-            .background(OrangeAccent, CircleShape)
+            .background(MaterialTheme.colorScheme.primary, CircleShape)
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -264,7 +262,7 @@ fun VoiceButton(
                     modifier = Modifier
                         .offset(x = offsetX, y = offsetY)
                         .size(if (index % 2 == 0) 6.dp else 4.dp)
-                        .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                        .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f), CircleShape)
                 )
             }
         }
@@ -272,7 +270,7 @@ fun VoiceButton(
         Icon(
             Icons.Filled.Mic,
             contentDescription = "Voice",
-            tint = Color.Black,
+            tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(32.dp)
         )
     }

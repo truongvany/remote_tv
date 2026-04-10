@@ -23,12 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_tv.ui.theme.ButtonBackground
-import com.example.remote_tv.ui.theme.CardBackground
-import com.example.remote_tv.ui.theme.OrangeAccent
-import com.example.remote_tv.ui.theme.TextSecondary
 
-// 1. Sửa Data Class: Đổi Channel thành AppItem và thêm packageName
 data class TrendingItem(val title: String, val category: String, val isNew: Boolean = false, val isLive: Boolean = false)
 data class AppItem(val name: String, val subtitle: String, val packageName: String, val isSelected: Boolean = false)
 
@@ -38,7 +33,6 @@ private val trendingList = listOf(
     TrendingItem("Cài đặt", "Hệ thống", isNew = true)
 )
 
-// 2. Danh sách App thực tế trên Android TV
 private val appList = listOf(
     AppItem("YouTube", "Video & Music", "com.google.android.youtube.tv", isSelected = true),
     AppItem("Netflix", "Movies & Shows", "com.netflix.ninja"),
@@ -50,7 +44,7 @@ private val appList = listOf(
 
 @Composable
 fun ChannelsScreen(
-    onLaunchApp: (String) -> Unit = {} // Hàm callback bắn Package Name ra ngoài để xử lý
+    onLaunchApp: (String) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -85,18 +79,23 @@ fun ChannelsScreen(
         ) {
             Text(
                 text = "Quick Launch",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(ButtonBackground, RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(14.dp))
                     .clickable { },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.FilterList, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(
+                    Icons.Filled.FilterList, 
+                    contentDescription = null, 
+                    tint = MaterialTheme.colorScheme.onSecondary, 
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
 
@@ -113,7 +112,6 @@ fun ChannelsScreen(
                         appItem = appItem,
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            // Khi click sẽ gọi hàm này và ném Package Name ra ngoài
                             onLaunchApp(appItem.packageName)
                         }
                     )
@@ -140,15 +138,15 @@ fun ChannelsHeader() {
             Box(
                 modifier = Modifier
                     .size(28.dp)
-                    .background(OrangeAccent, RoundedCornerShape(6.dp)),
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Search, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = "COMMAND",
-                color = OrangeAccent,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 22.sp,
                 letterSpacing = 1.sp
@@ -156,13 +154,13 @@ fun ChannelsHeader() {
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+            Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(20.dp))
             Box(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF252525))
+                    .background(MaterialTheme.colorScheme.secondary)
             )
         }
     }
@@ -174,16 +172,17 @@ fun SearchBar() {
         modifier = Modifier
             .fillMaxWidth()
             .height(60.dp)
-            .background(Color(0xFF0F0F0F), RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = Color(0xFF333333), modifier = Modifier.size(24.dp))
+            Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = "Search apps or commands",
-                color = Color(0xFF555555),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 fontSize = 15.sp
             )
         }
@@ -199,14 +198,14 @@ fun SectionHeader(title: String, hasViewAll: Boolean = false) {
     ) {
         Text(
             text = title,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold
         )
         if (hasViewAll) {
             Text(
                 text = "VIEW ALL",
-                color = OrangeAccent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.sp,
@@ -223,14 +222,14 @@ fun TrendingCard(item: TrendingItem) {
             .width(280.dp)
             .height(160.dp)
             .clip(RoundedCornerShape(30.dp))
-            .background(Color(0xFF1A1A1A))
+            .background(MaterialTheme.colorScheme.secondary)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)),
+                        colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)),
                         startY = 50f
                     )
                 )
@@ -245,29 +244,29 @@ fun TrendingCard(item: TrendingItem) {
                 if (item.isNew) {
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF3D1E16), RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
-                        Text("HOT", color = OrangeAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("HOT", color = MaterialTheme.colorScheme.primary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                 }
                 if (item.isLive) {
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF2D1010), RoundedCornerShape(6.dp))
+                            .background(Color.Red.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text("LIVE", color = Color.Red, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                 }
-                Text(item.category, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text(item.category, color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 item.title,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSecondary,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold
             )
@@ -275,12 +274,11 @@ fun TrendingCard(item: TrendingItem) {
     }
 }
 
-// 3. Đổi ChannelCard thành AppCard
 @Composable
 fun AppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val isSelected = appItem.isSelected
-    val backgroundColor = if (isSelected) Color(0xFF151515) else Color(0xFF151515)
-    val borderColor = if (isSelected) OrangeAccent.copy(alpha = 0.5f) else Color.Transparent
+    val backgroundColor = MaterialTheme.colorScheme.tertiary
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else Color.Transparent
 
     Box(
         modifier = modifier
@@ -288,7 +286,7 @@ fun AppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit
             .clip(RoundedCornerShape(40.dp))
             .background(backgroundColor)
             .then(if (isSelected) Modifier.border(1.5.dp, borderColor, RoundedCornerShape(40.dp)) else Modifier)
-            .clickable { onClick() } // GỌI SỰ KIỆN CLICK Ở ĐÂY
+            .clickable { onClick() }
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -298,14 +296,14 @@ fun AppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit
                     .align(Alignment.TopEnd)
                     .offset(x = (-4).dp, y = 4.dp)
                     .size(6.dp)
-                    .background(OrangeAccent, CircleShape)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
             )
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = appItem.name,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onTertiary,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.sp
@@ -315,14 +313,14 @@ fun AppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "NOW PLAYING",
-                    color = OrangeAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 1.sp
                 )
                 Text(
                     text = appItem.subtitle,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onTertiary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -330,7 +328,7 @@ fun AppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = appItem.subtitle,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.6f),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )

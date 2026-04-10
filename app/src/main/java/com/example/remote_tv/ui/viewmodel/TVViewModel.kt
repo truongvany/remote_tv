@@ -7,6 +7,9 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.net.Inet4Address
 import java.net.Socket
 import java.net.InetSocketAddress
@@ -24,6 +27,7 @@ import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.data.model.toTVDevice
 import com.example.remote_tv.data.network.WakeOnLanSender
 import com.example.remote_tv.data.casting.CastManager
+import com.example.remote_tv.data.casting.LocalMediaEndpoint
 import com.example.remote_tv.data.preferences.AppPreferencesRepository
 import com.example.remote_tv.data.preferences.MacroRepository
 import com.example.remote_tv.data.repository.TVRepository
@@ -75,6 +79,8 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     private val commandMutex = Mutex()
 
     val isCasting: StateFlow<Boolean> = castManager.isCasting
+    val castStatus: StateFlow<String> = castManager.castStatus
+    val castError: StateFlow<String?> = castManager.castError
 
     init {
         _uiState.update {
@@ -367,11 +373,94 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     // ----------------------------------------------------------------
 
     fun castVideo(url: String, title: String) {
-        castManager.castVideo(url, title)
+        val success = castManager.castVideo(url, title)
+        if (!success) {
+            _uiState.update { it.copy(actionMessage = castError.value ?: "Cannot start cast session") }
+        }
+    }
+
+    fun castImageFromUri(uri: Uri) {
+        viewModelScope.launch {
+            val connectedName = currentDevice.value?.name
+            val pushedToConnectedTv = pushMediaToConnectedTv(
+                endpoint = castManager.prepareImageEndpoint(uri, fallbackTitle = "Image"),
+                mediaLabel = "image",
+            )
+
+            if (pushedToConnectedTv) {
+                return@launch
+            }
+
+            val success = castManager.castImageFromUri(uri)
+            if (!success) {
+                _uiState.update {
+                    val fallback = if (connectedName != null) {
+                        "Cannot push image to $connectedName. Keep ADB connected or use Cast route icon."
+                    } else {
+                        "Cannot cast selected image"
+                    }
+                    it.copy(actionMessage = castError.value ?: fallback)
+                }
+            }
+        }
+    }
+
+    fun castVideoFromUri(uri: Uri) {
+        viewModelScope.launch {
+            val connectedName = currentDevice.value?.name
+            val pushedToConnectedTv = pushMediaToConnectedTv(
+                endpoint = castManager.prepareVideoEndpoint(uri, fallbackTitle = "Video"),
+                mediaLabel = "video",
+            )
+
+            if (pushedToConnectedTv) {
+                return@launch
+            }
+
+            val success = castManager.castVideoFromUri(uri)
+            if (!success) {
+                _uiState.update {
+                    val fallback = if (connectedName != null) {
+                        "Cannot push video to $connectedName. Keep ADB connected or use Cast route icon."
+                    } else {
+                        "Cannot cast selected video"
+                    }
+                    it.copy(actionMessage = castError.value ?: fallback)
+                }
+            }
+        }
     }
 
     fun stopCasting() {
         castManager.stopCasting()
+    }
+
+    private suspend fun pushMediaToConnectedTv(endpoint: LocalMediaEndpoint?, mediaLabel: String): Boolean {
+        val device = currentDevice.value ?: return false
+        val mediaEndpoint = endpoint ?: run {
+            _uiState.update { it.copy(actionMessage = "Cannot prepare selected $mediaLabel") }
+            return false
+        }
+
+        val targetUrl = mediaEndpoint.remoteOpenUrl.ifBlank { mediaEndpoint.url }
+        val targetMime = if (targetUrl != mediaEndpoint.url) "text/html" else mediaEndpoint.mimeType
+
+        val command = buildOpenUrlCommand(targetUrl, targetMime)
+        val sent = sendCommandInternal(command)
+        if (sent) {
+            _uiState.update {
+                it.copy(actionMessage = "Sent $mediaLabel to ${device.name}")
+            }
+            return true
+        }
+
+        return false
+    }
+
+    private fun buildOpenUrlCommand(url: String, mimeType: String): String {
+        val encodedUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
+        val encodedMime = URLEncoder.encode(mimeType, StandardCharsets.UTF_8.toString())
+        return "OPEN_URL:$encodedUrl|$encodedMime"
     }
 
     // Hàm phụ trợ xử lý Socket ADB của Huy chạy trên luồng nền (IO)
@@ -448,6 +537,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         repository.stopDiscovery()
+        castManager.release()
     }
 
     private fun hasFineLocationPermission(): Boolean {

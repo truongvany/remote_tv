@@ -24,11 +24,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.Intent
+import android.widget.Toast
 import com.example.remote_tv.data.model.AppThemeMode
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
 import com.example.remote_tv.ui.components.DeviceSelectionDialog
-import com.example.remote_tv.ui.theme.OrangeAccent
 import com.example.remote_tv.ui.viewmodel.TVViewModel
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
@@ -55,6 +55,8 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     val connectionError by viewModel.connectionError.collectAsState()
     val diagnosticLogs by viewModel.diagnosticLogs.collectAsState()
     val settingsUiState by viewModel.settingsUiState.collectAsState()
+    val isCasting by viewModel.isCasting.collectAsState()
+    val castStatus by viewModel.castStatus.collectAsState()
     
     val context = LocalContext.current
 
@@ -63,6 +65,20 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = viewModel::onLocationPermissionResult,
+    )
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            uri?.let(viewModel::castImageFromUri)
+        },
+    )
+
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            uri?.let(viewModel::castVideoFromUri)
+        },
     )
 
     LaunchedEffect(uiState.selectedTab, uiState.hasLocationPermission) {
@@ -82,6 +98,12 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
             viewModel.selectTab(0)
         }
         lastConnectedKey = currentKey
+    }
+
+    LaunchedEffect(uiState.actionMessage) {
+        val message = uiState.actionMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.consumeActionMessage()
     }
 
     if (uiState.showDeviceDialog) {
@@ -115,7 +137,6 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                 0 -> MainRemoteTab(viewModel)
                 1 -> ChannelsScreen(
                     onLaunchApp = { packageName ->
-                        // Bắn cái packageName (ví dụ: com.google.android.youtube.tv) vào ViewModel
                         viewModel.launchApp(packageName)
                     }
                 )
@@ -130,6 +151,8 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                     localIpAddress = uiState.localIpAddress,
                     localSubnet = uiState.localSubnet,
                     diagnosticLogs = diagnosticLogs,
+                    isCastSessionActive = isCasting,
+                    castStatus = castStatus,
                     onRequestPermission = {
                         locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                     },
@@ -143,19 +166,42 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                     onDeviceSelected = viewModel::connectToDevice,
                     onClearDiagnostics = viewModel::clearDiagnosticLogs,
                     onScreenMirroringClick = {
-                        try {
-                            val intent = Intent("android.settings.CAST_SETTINGS")
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            try {
-                                val intent = Intent(android.provider.Settings.ACTION_CAST_SETTINGS)
-                                context.startActivity(intent)
-                            } catch (e2: Exception) {
-                                // Fallback if device doesn't support short intent
+                        val candidates = listOf(
+                            Intent("android.settings.panel.action.CAST"),
+                            Intent(android.provider.Settings.ACTION_CAST_SETTINGS),
+                            Intent("android.settings.CAST_SETTINGS"),
+                            Intent("android.settings.WIFI_DISPLAY_SETTINGS"),
+                            Intent(android.provider.Settings.ACTION_SETTINGS),
+                        )
+
+                        var opened = false
+                        for (intent in candidates) {
+                            val launchIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            val canHandle = launchIntent.resolveActivity(context.packageManager) != null
+                            if (canHandle) {
+                                runCatching {
+                                    context.startActivity(launchIntent)
+                                    opened = true
+                                }
+                                if (opened) break
                             }
                         }
+
+                        if (opened) {
+                            val target = currentDevice?.name
+                            val message = if (target != null) {
+                                "Select $target to start screen mirroring"
+                            } else {
+                                "Select your TV in Cast settings to mirror this phone"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Cannot open Cast settings on this phone", Toast.LENGTH_SHORT).show()
+                        }
                     },
-                    onCastVideo = viewModel::castVideo
+                    onPickImage = { imagePickerLauncher.launch("image/*") },
+                    onPickVideo = { videoPickerLauncher.launch("video/*") },
+                    onStopCasting = viewModel::stopCasting,
                 )
                 3 -> MacroScreen(viewModel)
                 4 -> SettingsScreen(
@@ -181,8 +227,15 @@ fun CustomBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(80.dp)
-            .background(Color(0xFF000000), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-            .border(1.dp, Color(0xFF191919), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .background(
+                MaterialTheme.colorScheme.surface, 
+                RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+            )
+            .border(
+                1.dp, 
+                MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f), 
+                RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+            )
             .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -204,7 +257,7 @@ fun CustomBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                     Icon(
                         tab.icon,
                         contentDescription = tab.contentDescription,
-                        tint = if (isSelected) OrangeAccent else Color(0xFFADAAAA),
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -212,7 +265,7 @@ fun CustomBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
-                                .background(OrangeAccent, CircleShape)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
                         )
                     } else {
                         Spacer(modifier = Modifier.height(6.dp))
@@ -226,6 +279,6 @@ fun CustomBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
 @Composable
 private fun ComingSoonScreen() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Coming Soon", color = Color.White)
+        Text("Coming Soon", color = MaterialTheme.colorScheme.onBackground)
     }
 }
