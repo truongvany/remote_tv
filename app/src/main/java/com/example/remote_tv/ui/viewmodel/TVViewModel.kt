@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -69,6 +71,8 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _lastDeviceName = MutableStateFlow<String?>(null)
     val lastDeviceName: StateFlow<String?> = _lastDeviceName.asStateFlow()
+
+    private val commandMutex = Mutex()
 
     val isCasting: StateFlow<Boolean> = castManager.isCasting
 
@@ -225,12 +229,43 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendCommand(command: String) {
         viewModelScope.launch {
+            sendCommandInternal(command)
+        }
+    }
+
+    fun sendText(text: String) = sendCommand("TEXT:$text")
+
+    fun sendVoiceQuery(query: String) {
+        viewModelScope.launch {
+            val normalized = query.trim()
+            if (normalized.isBlank()) return@launch
+
+            val openSearch = sendCommandInternal("KEY_SEARCH")
+            if (!openSearch) {
+                _uiState.update { it.copy(actionMessage = "Cannot open search on current TV connection") }
+                return@launch
+            }
+
+            delay(180)
+            val sentText = sendCommandInternal("TEXT:$normalized")
+            delay(120)
+            val submitted = sendCommandInternal("KEY_ENTER")
+
+            if (!sentText || !submitted) {
+                _uiState.update { it.copy(actionMessage = "Voice recognized but text was not sent completely") }
+            }
+        }
+    }
+
+    private suspend fun sendCommandInternal(command: String): Boolean {
+        return commandMutex.withLock {
             val success = repository.sendCommand(command)
             if (!success && command.startsWith("TEXT:")) {
                 _uiState.update {
                     it.copy(actionMessage = "Cannot send text on current TV connection")
                 }
             }
+            success
         }
     }
 
@@ -296,7 +331,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.update { it.copy(actionMessage = "Running: ${macro.name}") }
             for (command in macro.commands) {
-                sendCommand(command)
+                sendCommandInternal(command)
                 delay(macro.delayMs)
             }
             _uiState.update { it.copy(actionMessage = "${macro.name} done") }

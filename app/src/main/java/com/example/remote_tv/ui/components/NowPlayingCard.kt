@@ -27,14 +27,14 @@ fun NowPlayingCard() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(30.dp))
+            .clip(RoundedCornerShape(28.dp)) // Slightly smaller radius
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(Color(0xFF151515), Color(0xFF121212))
                 )
             )
-            .border(1.dp, Color(0xFF262626), RoundedCornerShape(30.dp))
-            .padding(24.dp)
+            .border(1.dp, Color(0xFF262626), RoundedCornerShape(28.dp))
+            .padding(20.dp) // Reduced padding from 24.dp
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -45,41 +45,41 @@ fun NowPlayingCard() {
                 Text(
                     text = "NOW PLAYING",
                     color = TextSecondary,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp, // Reduced from 11.sp
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
+                    letterSpacing = 1.sp
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "The Mandalorian",
                     color = Color.White,
-                    fontSize = 22.sp,
+                    fontSize = 20.sp, // Reduced from 22.sp
                     fontWeight = FontWeight.Black
                 )
                 Text(
                     text = "S2 : E5 • Chapter 13: The Jedi",
                     color = OrangeAccent,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp, // Reduced from 13.sp
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xFF1F1F1F))
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = "4K",
                     color = OrangeAccent,
-                    fontSize = 12.sp,
+                    fontSize = 10.sp, // Reduced from 12.sp
                     fontWeight = FontWeight.Black
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -89,13 +89,13 @@ fun NowPlayingCard() {
                 Icons.AutoMirrored.Filled.VolumeDown,
                 contentDescription = null,
                 tint = Color(0xFFADAAAA),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(14.dp) // Reduced from 16.dp
             )
 
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(10.dp)
+                    .height(8.dp) // Reduced from 10.dp
                     .clip(CircleShape)
                     .background(Color.Black)
             ) {
@@ -129,7 +129,7 @@ fun NowPlayingCard() {
                 Icons.AutoMirrored.Filled.VolumeUp,
                 contentDescription = null,
                 tint = Color(0xFFADAAAA),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(14.dp) // Reduced from 16.dp
             )
         }
     }

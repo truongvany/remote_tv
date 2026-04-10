@@ -55,6 +55,7 @@ class AdbProtocol : TVProtocol {
     private val keyMap = mapOf(
         "KEY_POWER"      to 26,  "KEY_HOME"       to 3,
         "KEY_BACK"       to 4,   "KEY_MENU"        to 82,
+        "KEY_SETTINGS"   to 176,
         "KEY_ENTER"      to 66,  "OK"              to 66,
         "KEY_VOL_UP"      to 24, "KEY_VOL_DOWN"    to 25,
         "KEY_MUTE"        to 164,"KEY_PLAY_PAUSE"  to 85,
@@ -68,6 +69,7 @@ class AdbProtocol : TVProtocol {
         "LEFT"           to 21,  "MOVE_LEFT"       to 21,
         "RIGHT"          to 22,  "MOVE_RIGHT"      to 22,
         "KEY_CH_UP"      to 166, "KEY_CH_DOWN"     to 167,
+        "KEY_CHANNEL_UP" to 166, "KEY_CHANNEL_DOWN" to 167,
         "KEY_0" to 7,  "KEY_1" to 8,  "KEY_2" to 9,  "KEY_3" to 10,
         "KEY_4" to 11, "KEY_5" to 12, "KEY_6" to 13, "KEY_7" to 14,
         "KEY_8" to 15, "KEY_9" to 16,
@@ -164,33 +166,21 @@ class AdbProtocol : TVProtocol {
                 return@withContext false
             }
 
-            val utf8Hex = normalized.toByteArray(Charsets.UTF_8).joinToString(" ") { byte ->
-                "%02x".format(byte)
-            }
-            InAppDiagnostics.info(TAG, "ADB TEXT payload utf8=$utf8Hex")
-
-            val chunks = normalized.chunked(24)
-            chunks.forEachIndexed { index, chunk ->
-                val escapedText = chunk
-                    .replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("$", "\\$")
-                    .replace("`", "\\`")
-
-                val encodedSpaceText = escapedText.replace(" ", "%s")
-                val sent = sendShellCommand("input text \"$encodedSpaceText\"\n")
-                if (!sent) {
-                    InAppDiagnostics.error(TAG, "ADB TEXT failed at chunk ${index + 1}/${chunks.size}")
-                    return@withContext false
-                }
-
-                if (index < chunks.lastIndex) {
-                    delay(55)
-                }
+            // Preferred path for Unicode + spaces: put text into clipboard then paste.
+            val pasted = sendTextViaClipboard(normalized)
+            if (pasted) {
+                InAppDiagnostics.info(TAG, "ADB text sent via clipboard paste")
+                return@withContext true
             }
 
-            InAppDiagnostics.info(TAG, "ADB text sent chunks=${chunks.size}")
-            return@withContext true
+            InAppDiagnostics.warn(TAG, "ADB TEXT clipboard path failed, fallback to input text")
+            val injected = sendTextByInputCommand(normalized)
+            if (injected) {
+                InAppDiagnostics.info(TAG, "ADB text sent via input text fallback")
+            } else {
+                InAppDiagnostics.error(TAG, "ADB text failed on both clipboard and fallback paths")
+            }
+            return@withContext injected
         }
 
         val keyCode = keyMap[command] ?: run {
@@ -203,6 +193,56 @@ class AdbProtocol : TVProtocol {
                     InAppDiagnostics.info(TAG, "ADB command: $command sent")
                 }
             }
+    }
+
+    private suspend fun sendTextByInputCommand(text: String): Boolean {
+        val parts = Regex("\\s+|\\S+").findAll(text).map { it.value }.toList()
+
+        parts.forEach { part ->
+            if (part.isBlank()) {
+                repeat(part.length) {
+                    if (!sendShellCommand("input keyevent 62\n")) {
+                        return false
+                    }
+                    delay(20)
+                }
+                return@forEach
+            }
+
+            val chunks = part.chunked(20)
+            chunks.forEachIndexed { index, chunk ->
+                val escaped = escapeForShellDoubleQuoted(chunk)
+                val sent = sendShellCommand("input text \"$escaped\"\n")
+                if (!sent) {
+                    InAppDiagnostics.error(TAG, "ADB TEXT fallback failed at chunk ${index + 1}/${chunks.size}")
+                    return false
+                }
+
+                if (index < chunks.lastIndex) {
+                    delay(40)
+                }
+            }
+        }
+
+        return true
+    }
+
+    private fun sendTextViaClipboard(text: String): Boolean {
+        val escaped = escapeForShellDoubleQuoted(text)
+        val setClipboard = sendShellCommand("cmd clipboard set text \"$escaped\"\n")
+        if (!setClipboard) {
+            return false
+        }
+
+        return sendShellCommand("input keyevent 279\n")
+    }
+
+    private fun escapeForShellDoubleQuoted(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("$", "\\$")
+            .replace("`", "\\`")
     }
 
     private fun sendShellCommand(shellCmd: String): Boolean {

@@ -26,15 +26,15 @@ import com.example.remote_tv.ui.theme.OrangeAccent
 fun DPad(onDirection: (String) -> Unit, onOk: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(318.dp)
-            .background(Color(0xFF110B09), CircleShape)
-            .padding(15.dp),
+            .size(280.dp) // Giảm từ 318.dp
+            .background(Color(0xFF0F0F0F), CircleShape)
+            .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .shadow(12.dp, CircleShape)
+                .shadow(10.dp, CircleShape)
                 .background(
                     brush = Brush.radialGradient(
                         colors = listOf(OrangeAccent, Color(0xFFFF5D1F))
@@ -42,36 +42,37 @@ fun DPad(onDirection: (String) -> Unit, onOk: () -> Unit) {
                     shape = CircleShape
                 )
         ) {
-            DirectionIcon(Icons.Filled.KeyboardArrowUp, Alignment.TopCenter, Modifier.padding(top = 24.dp))
-            DirectionIcon(Icons.Filled.KeyboardArrowDown, Alignment.BottomCenter, Modifier.padding(bottom = 24.dp))
-            DirectionIcon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, Alignment.CenterStart, Modifier.padding(start = 24.dp))
-            DirectionIcon(Icons.AutoMirrored.Filled.KeyboardArrowRight, Alignment.CenterEnd, Modifier.padding(end = 24.dp))
+            // Giảm kích thước mũi tên và khoảng cách
+            DirectionIcon(Icons.Filled.KeyboardArrowUp, Alignment.TopCenter, Modifier.padding(top = 18.dp))
+            DirectionIcon(Icons.Filled.KeyboardArrowDown, Alignment.BottomCenter, Modifier.padding(bottom = 18.dp))
+            DirectionIcon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, Alignment.CenterStart, Modifier.padding(start = 18.dp))
+            DirectionIcon(Icons.AutoMirrored.Filled.KeyboardArrowRight, Alignment.CenterEnd, Modifier.padding(end = 18.dp))
 
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(0.36f)
+                        .fillMaxHeight(0.38f)
                         .align(Alignment.TopCenter)
                         .clickable { onDirection("UP") }
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(0.36f)
+                        .fillMaxHeight(0.38f)
                         .align(Alignment.BottomCenter)
                         .clickable { onDirection("DOWN") }
                 )
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.36f)
+                        .fillMaxWidth(0.38f)
                         .fillMaxHeight()
                         .align(Alignment.CenterStart)
                         .clickable { onDirection("LEFT") }
                 )
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.36f)
+                        .fillMaxWidth(0.38f)
                         .fillMaxHeight()
                         .align(Alignment.CenterEnd)
                         .clickable { onDirection("RIGHT") }
@@ -81,8 +82,8 @@ fun DPad(onDirection: (String) -> Unit, onOk: () -> Unit) {
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(112.dp)
-                    .background(Color(0xFFB56A4E), CircleShape)
+                    .size(96.dp) // Giảm từ 112.dp
+                    .background(Color(0xFFB34A2A), CircleShape)
                     .clickable { onOk() },
                 contentAlignment = Alignment.Center
             ) {
@@ -106,7 +107,7 @@ private fun BoxScope.DirectionIcon(
     Icon(
         icon,
         contentDescription = null,
-        tint = Color(0xFF5A2818),
-        modifier = modifier.align(alignment).size(40.dp)
+        tint = Color(0xFF5D2817),
+        modifier = modifier.align(alignment).size(36.dp) // Giảm từ 40.dp
     )
 }

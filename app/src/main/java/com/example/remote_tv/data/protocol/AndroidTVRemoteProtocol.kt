@@ -51,6 +51,11 @@ class AndroidTVRemoteProtocol : TVProtocol {
             "KEY_VOICE" to 231,
             "KEY_POWER" to 26,
             "KEY_MENU" to 82,
+            "KEY_SETTINGS" to 176,
+            "KEY_CH_UP" to 166,
+            "KEY_CH_DOWN" to 167,
+            "KEY_CHANNEL_UP" to 166,
+            "KEY_CHANNEL_DOWN" to 167,
             "KEY_PLAY_PAUSE" to 85,
         )
     }

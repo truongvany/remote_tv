@@ -24,7 +24,7 @@ fun TopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 20.dp),
+            .padding(horizontal = 8.dp, vertical = 16.dp), // Giảm padding vertical
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -33,7 +33,7 @@ fun TopBar(
                 Icons.Filled.PowerSettingsNew,
                 contentDescription = "Power",
                 tint = OrangeAccent,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(28.dp) // Giảm từ 32.dp
             )
         }
 
@@ -41,12 +41,12 @@ fun TopBar(
             text = deviceName.uppercase(),
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.5.sp
+                letterSpacing = 1.sp
             ),
             color = Color.White,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
-            fontSize = 18.sp
+            fontSize = 16.sp // Giảm từ 18.sp
         )
 
         IconButton(onClick = onCastClick) {
@@ -54,7 +54,7 @@ fun TopBar(
                 Icons.Filled.Cast,
                 contentDescription = "Connect",
                 tint = Color(0xFFADAAAA),
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(28.dp) // Giảm từ 32.dp
             )
         }
     }

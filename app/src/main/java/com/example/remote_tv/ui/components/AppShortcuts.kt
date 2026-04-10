@@ -66,11 +66,11 @@ fun QuickLaunch(
             Text(
                 text = "QUICK LAUNCH",
                 color = TextSecondary,
-                fontSize = 11.sp,
+                fontSize = 10.sp, // Reduced from 11.sp
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.6.sp
+                letterSpacing = 1.2.sp
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -79,11 +79,11 @@ fun QuickLaunch(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp)) // Reduced from 16.dp
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp) // Reduced from 12.dp
         ) {
             displayApps.forEach { app ->
                 val iconUrl = apps.find { it.id == app.packageId }?.iconUrl
@@ -110,10 +110,10 @@ fun AppCard(
     Box(
         modifier = modifier
             .alpha(if (isEnabled) 1f else 0.45f)
-            .height(74.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(64.dp) // Reduced from 74.dp
+            .clip(RoundedCornerShape(16.dp)) // Reduced from 18.dp
             .background(ButtonBackground)
-            .border(1.dp, Color(0xFF252525), RoundedCornerShape(18.dp))
+            .border(1.dp, Color(0xFF252525), RoundedCornerShape(16.dp))
             .clickable(enabled = isEnabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -123,28 +123,27 @@ fun AppCard(
                 .background(app.accentTint)
         )
 
-        // removed logic to find iconUrl here since passed by param
-
         if (iconUrl != null) {
             AsyncImage(
                 model = iconUrl,
                 contentDescription = app.name,
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)), // Reduced size from 40.dp
                 contentScale = ContentScale.Fit
             )
         } else {
             when (app.name) {
                 "YouTube", "YouTube TV" -> {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(
                             imageVector = Icons.Filled.SmartDisplay,
                             contentDescription = "YouTube",
-                            tint = Color(0xFFFA3D3D)
+                            tint = Color(0xFFFA3D3D),
+                            modifier = Modifier.size(20.dp) // Added size constraint
                         )
                         Text(
                             text = "YouTube",
                             color = app.textColor,
-                            fontSize = 15.sp,
+                            fontSize = 13.sp, // Reduced from 15.sp
                             fontWeight = FontWeight.Black
                         )
                     }
@@ -154,7 +153,7 @@ fun AppCard(
                     Text(
                         text = app.name,
                         color = app.textColor,
-                        fontSize = 15.sp,
+                        fontSize = 13.sp, // Reduced from 15.sp
                         fontWeight = FontWeight.Black,
                         fontStyle = FontStyle.Italic
                     )
@@ -164,7 +163,7 @@ fun AppCard(
                     Text(
                         text = app.name,
                         color = app.textColor,
-                        fontSize = 15.sp,
+                        fontSize = 13.sp, // Reduced from 15.sp
                         fontWeight = FontWeight.Black
                     )
                 }

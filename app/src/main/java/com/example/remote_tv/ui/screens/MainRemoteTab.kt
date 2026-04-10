@@ -139,9 +139,7 @@ fun MainRemoteTab(viewModel: TVViewModel) {
                 if (spokenText.isNotEmpty()) {
                     voiceTranscript = spokenText
                     voiceStatusText = "Sending to TV..."
-                    viewModel.sendCommand("KEY_SEARCH")
-                    viewModel.sendCommand("TEXT:$spokenText")
-                    viewModel.sendCommand("KEY_ENTER")
+                    viewModel.sendVoiceQuery(spokenText)
                 } else {
                     voiceStatusText = "No speech detected"
                 }
@@ -230,7 +228,7 @@ fun MainRemoteTab(viewModel: TVViewModel) {
                 )
 
                 2 -> KeyboardInput(
-                    onSendText = { text -> viewModel.sendCommand("TEXT:$text") }
+                    onSendText = { text -> viewModel.sendText(text) }
                 )
             }
 
