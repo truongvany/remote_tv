@@ -166,19 +166,39 @@ class AdbProtocol : TVProtocol {
                 return@withContext false
             }
 
-            // Preferred path for Unicode + spaces: put text into clipboard then paste.
+            // For stability, use input text first for common cases.
+            // Clipboard paste is kept as fallback for complex Unicode payloads.
+            val hasNonAscii = normalized.any { ch -> ch.code > 127 }
+
+            if (!hasNonAscii) {
+                val injected = sendTextByInputCommand(normalized)
+                if (injected) {
+                    InAppDiagnostics.info(TAG, "ADB text sent via input text")
+                    return@withContext true
+                }
+
+                InAppDiagnostics.warn(TAG, "ADB TEXT input path failed, trying clipboard fallback")
+                val pasted = sendTextViaClipboard(normalized)
+                if (pasted) {
+                    InAppDiagnostics.info(TAG, "ADB text sent via clipboard fallback")
+                } else {
+                    InAppDiagnostics.error(TAG, "ADB text failed on both input and clipboard paths")
+                }
+                return@withContext pasted
+            }
+
             val pasted = sendTextViaClipboard(normalized)
             if (pasted) {
-                InAppDiagnostics.info(TAG, "ADB text sent via clipboard paste")
+                InAppDiagnostics.info(TAG, "ADB text sent via clipboard (unicode path)")
                 return@withContext true
             }
 
-            InAppDiagnostics.warn(TAG, "ADB TEXT clipboard path failed, fallback to input text")
+            InAppDiagnostics.warn(TAG, "ADB TEXT clipboard path failed for unicode, fallback to input text")
             val injected = sendTextByInputCommand(normalized)
             if (injected) {
-                InAppDiagnostics.info(TAG, "ADB text sent via input text fallback")
+                InAppDiagnostics.info(TAG, "ADB text sent via input text unicode fallback")
             } else {
-                InAppDiagnostics.error(TAG, "ADB text failed on both clipboard and fallback paths")
+                InAppDiagnostics.error(TAG, "ADB text failed on both clipboard and input paths")
             }
             return@withContext injected
         }
@@ -248,9 +268,30 @@ class AdbProtocol : TVProtocol {
     private fun sendShellCommand(shellCmd: String): Boolean {
         return try {
             send(A_WRTE, localId, remoteId, shellCmd.toByteArray())
-            val ack = read()
-            if (ack?.command == A_OKAY) send(A_OKAY, localId, remoteId, ByteArray(0))
-            true
+
+            var receivedOkay = false
+            var guard = 0
+
+            while (guard < 16) {
+                val msg = read() ?: break
+                when (msg.command) {
+                    A_OKAY -> {
+                        receivedOkay = true
+                        break
+                    }
+                    A_WRTE -> {
+                        // Ack shell output frame to keep the stream healthy.
+                        send(A_OKAY, localId, remoteId, ByteArray(0))
+                    }
+                    A_CLSE -> {
+                        send(A_CLSE, localId, remoteId, ByteArray(0))
+                        return false
+                    }
+                }
+                guard++
+            }
+
+            receivedOkay
         } catch (e: Exception) {
             InAppDiagnostics.error(TAG, "ADB sendCommand failed: ${e.message}"); false
         }
