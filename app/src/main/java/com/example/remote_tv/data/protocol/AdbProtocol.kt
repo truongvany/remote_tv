@@ -515,12 +515,46 @@ class AdbProtocol : TVProtocol {
 
     override suspend fun launchApp(appId: String): Boolean = withContext(Dispatchers.IO) {
         if (!isConnected) return@withContext false
-        return@withContext try {
-            send(A_WRTE, localId, remoteId, "monkey -p $appId -c android.intent.category.LAUNCHER 1\n".toByteArray())
-            InAppDiagnostics.info(TAG, "ADB launch app: $appId"); true
-        } catch (e: Exception) {
-            InAppDiagnostics.error(TAG, "ADB launchApp failed: ${e.message}"); false
+
+        val launchTarget = appId.trim()
+        if (launchTarget.isBlank()) {
+            InAppDiagnostics.warn(TAG, "ADB launch app ignored: blank target")
+            return@withContext false
         }
+
+        val shellCommand = when {
+            launchTarget.startsWith("am ") ||
+                launchTarget.startsWith("cmd ") ||
+                launchTarget.startsWith("monkey ") -> "$launchTarget\n"
+
+            else -> "monkey -p $launchTarget -c android.intent.category.LAUNCHER 1\n"
+        }
+
+        val result = sendShellCommandDetailed(shellCommand)
+        val failedByOutput = looksLikeAppLaunchFailure(result.output)
+        val success = result.success && !failedByOutput
+
+        if (success) {
+            InAppDiagnostics.info(TAG, "ADB launch app success: $launchTarget")
+        } else {
+            InAppDiagnostics.warn(
+                TAG,
+                "ADB launch app failed: $launchTarget output=${result.output.take(140)}"
+            )
+        }
+
+        success
+    }
+
+    private fun looksLikeAppLaunchFailure(output: String): Boolean {
+        if (output.isBlank()) return false
+        val normalized = output.lowercase()
+        return normalized.contains("monkey aborted") ||
+            normalized.contains("no activities found to run") ||
+            (normalized.contains("activity class") && normalized.contains("does not exist")) ||
+            normalized.contains("unable to resolve intent") ||
+            normalized.contains("permission denial") ||
+            normalized.contains("securityexception")
     }
 
     // ── Wire protocol helpers ───────────────────────────────────────────────

@@ -37,7 +37,7 @@ private val appList = listOf(
     AppItem("YouTube", "Video & Music", "com.google.android.youtube.tv", isSelected = true),
     AppItem("Netflix", "Movies & Shows", "com.netflix.ninja"),
     AppItem("Play Store", "Tải ứng dụng", "com.android.vending"),
-    AppItem("Cài đặt", "Hệ thống TV", "am start -a android.settings.SETTINGS"),
+    AppItem("Cài đặt", "Hệ thống TV", "com.android.tv.settings"),
     AppItem("Prime", "Amazon Video", "com.amazon.amazonvideo.livingroom"),
     AppItem("Spotify", "Music", "com.spotify.tv.android")
 )

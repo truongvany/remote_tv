@@ -435,12 +435,38 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private fun appSearchQuery(appId: String): String? {
-        return when (appId) {
+        val normalizedAppId = appId.trim()
+        return when (normalizedAppId) {
             "com.netflix.ninja" -> "Netflix"
-            "com.google.android.youtube.tv" -> "YouTube"
+            "com.google.android.youtube.tv", "com.google.android.youtube.tvunplugged" -> "YouTube"
             "com.disney.disneyplus" -> "Disney Plus"
-            else -> null
+            "com.amazon.amazonvideo.livingroom" -> "Prime Video"
+            "com.spotify.tv.android" -> "Spotify"
+            "com.android.vending" -> "Play Store"
+            "com.android.tv.settings", "am start -a android.settings.SETTINGS" -> "Settings"
+            else -> normalizedAppId.toSearchFallbackQuery()
         }
+    }
+
+    private fun String.toSearchFallbackQuery(): String? {
+        val normalized = trim()
+        if (normalized.isBlank()) return null
+
+        if (normalized.startsWith("am start -a android.settings.SETTINGS", ignoreCase = true)) {
+            return "Settings"
+        }
+
+        if (!normalized.contains('.')) {
+            return normalized.takeIf { it.length >= 2 }
+        }
+
+        val candidate = normalized
+            .substringAfterLast('.')
+            .replace('_', ' ')
+            .replace('-', ' ')
+            .replaceFirstChar { ch -> ch.uppercase() }
+
+        return candidate.takeIf { it.length >= 2 }
     }
 
     private fun resolveCommandCandidates(command: String, protocol: TVProtocol): List<String> {
@@ -481,15 +507,21 @@ class TVConnectionManager(private val client: HttpClient) {
         return when (device.brand) {
             TVBrand.SAMSUNG -> when (appId) {
                 "com.netflix.ninja" -> "11101200001"
-                "com.google.android.youtube.tv" -> "111299001912"
+                "com.google.android.youtube.tv", "com.google.android.youtube.tvunplugged" -> "111299001912"
                 "com.disney.disneyplus" -> "3201901017640"
+                "com.amazon.amazonvideo.livingroom" -> "3201512006785"
+                "com.spotify.tv.android" -> "3201606009684"
+                "com.android.tv.settings" -> "org.tizen.settings"
                 else -> appId
             }
 
             TVBrand.LG -> when (appId) {
                 "com.netflix.ninja" -> "netflix"
-                "com.google.android.youtube.tv" -> "youtube.leanback.v4"
+                "com.google.android.youtube.tv", "com.google.android.youtube.tvunplugged" -> "youtube.leanback.v4"
                 "com.disney.disneyplus" -> "com.disney.disneyplus-prod"
+                "com.amazon.amazonvideo.livingroom" -> "amazon"
+                "com.spotify.tv.android" -> "spotify-beehive"
+                "com.android.tv.settings" -> "com.webos.app.settings"
                 else -> appId
             }
 

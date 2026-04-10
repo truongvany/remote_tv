@@ -146,33 +146,30 @@ class AndroidTVRemoteProtocol : TVProtocol {
     }
 
     override suspend fun launchApp(appId: String): Boolean = withContext(Dispatchers.IO) {
-        // Đã được Hoàng Văn Huy fix: Sử dụng ADB (Port 5555) để ép TV mở App
+        val ip = socket?.inetAddress?.hostAddress ?: return@withContext false
+        val target = appId.trim()
+        if (target.isBlank()) return@withContext false
+
+        val adb = AdbProtocol()
         return@withContext try {
-            Log.d(TAG, "Attempting to launch app via ADB: $appId")
-
-            // Lấy IP từ socket hiện tại đang kết nối (nếu có)
-            val ip = socket?.inetAddress?.hostAddress ?: return@withContext false
-
-            // Tạo 1 kết nối ADB song song vào cổng 5555
-            val adbSocket = Socket()
-            adbSocket.connect(InetSocketAddress(ip, 5555), 2000)
-            val out = adbSocket.getOutputStream()
-
-            val command = if (appId.startsWith("am start")) {
-                "$appId\n"
-            } else {
-                "monkey -p $appId -c android.intent.category.LAUNCHER 1\n"
+            val connected = adb.connect(ip, 5555)
+            if (!connected) {
+                InAppDiagnostics.warn(TAG, "launchApp ADB connect failed: $ip:5555")
+                return@withContext false
             }
 
-            out.write(command.toByteArray())
-            out.flush()
-            adbSocket.close()
-
-            Log.d(TAG, "Launch command sent successfully!")
-            true
+            val success = adb.launchApp(target)
+            if (success) {
+                InAppDiagnostics.info(TAG, "launchApp via ADB success: $target")
+            } else {
+                InAppDiagnostics.warn(TAG, "launchApp via ADB failed: $target")
+            }
+            success
         } catch (e: Exception) {
             Log.e(TAG, "launchApp ADB error: ${e.message}")
             false
+        } finally {
+            runCatching { adb.disconnect() }
         }
     }
 }

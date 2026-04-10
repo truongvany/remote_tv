@@ -26,14 +26,14 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF424242), // Dark Gray for primary in light mode
+    primary = LightPrimary,
     secondary = LightButton,
     tertiary = LightCard,
     background = LightBackground,
     surface = LightSurface,
     onPrimary = Color.White,
     onSecondary = LightTextPrimary,
-    onTertiary = LightTextSecondary,
+    onTertiary = LightTextPrimary,
     onBackground = LightTextPrimary,
     onSurface = LightTextPrimary,
 )

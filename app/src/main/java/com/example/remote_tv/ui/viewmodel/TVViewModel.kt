@@ -11,8 +11,6 @@ import android.net.Uri
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.net.Inet4Address
-import java.net.Socket
-import java.net.InetSocketAddress
 import android.util.Log
 import android.util.Patterns
 import androidx.core.content.ContextCompat
@@ -28,6 +26,7 @@ import com.example.remote_tv.data.model.toTVDevice
 import com.example.remote_tv.data.network.WakeOnLanSender
 import com.example.remote_tv.data.casting.CastManager
 import com.example.remote_tv.data.casting.LocalMediaEndpoint
+import com.example.remote_tv.data.protocol.AdbProtocol
 import com.example.remote_tv.data.preferences.AppPreferencesRepository
 import com.example.remote_tv.data.preferences.MacroRepository
 import com.example.remote_tv.data.repository.TVRepository
@@ -463,24 +462,21 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         return "OPEN_URL:$encodedUrl|$encodedMime"
     }
 
-    // Hàm phụ trợ xử lý Socket ADB của Huy chạy trên luồng nền (IO)
+    // ADB fallback chạy trên luồng nền (IO)
     private suspend fun launchAppViaAdb(ip: String, packageName: String): Boolean = withContext(Dispatchers.IO) {
+        val adb = AdbProtocol()
         try {
-            val socket = Socket()
-            socket.connect(InetSocketAddress(ip, 5555), 2000)
-            val out = socket.getOutputStream()
-            val command = if (packageName.startsWith("am start")) {
-                "$packageName\n"
-            } else {
-                "monkey -p $packageName -c android.intent.category.LAUNCHER 1\n"
+            val connected = adb.connect(ip, 5555)
+            if (!connected) {
+                return@withContext false
             }
-            out.write(command.toByteArray())
-            out.flush()
-            socket.close()
-            true
+
+            adb.launchApp(packageName.trim())
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        } finally {
+            runCatching { adb.disconnect() }
         }
     }
     // =======================================================

@@ -285,6 +285,7 @@ private fun CastSessionStatusPill(isActive: Boolean, status: String) {
 @Composable
 fun ScanningAnimationArea() {
     val infiniteTransition = rememberInfiniteTransition(label = "scanning")
+    val pulseColor = MaterialTheme.colorScheme.primary
     
     val scale1 by infiniteTransition.animateFloat(
         initialValue = 0.5f,
@@ -307,7 +308,7 @@ fun ScanningAnimationArea() {
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
-                color = Color.Gray.copy(alpha = alpha1),
+                color = pulseColor.copy(alpha = alpha1 * 0.55f),
                 radius = (size.minDimension / 2) * scale1,
                 style = Stroke(width = 2.dp.toPx())
             )
