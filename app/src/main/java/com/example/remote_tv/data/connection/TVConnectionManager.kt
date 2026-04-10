@@ -209,6 +209,10 @@ class TVConnectionManager(private val client: HttpClient) {
     private fun buildConnectionError(device: TVDevice): String {
         return when (device.brand) {
             TVBrand.ANDROID_TV -> {
+                if (device.ipAddress.startsWith("fe80", ignoreCase = true)) {
+                    "TV đang trả địa chỉ IPv6 link-local (${device.ipAddress}) nên kết nối có thể thất bại nếu thiếu scope mạng. " +
+                        "Hãy refresh để chọn thiết bị có IPv4 (thường dạng 10.x/192.168.x), hoặc đảm bảo điện thoại và TV cùng Wi-Fi rồi thử lại."
+                } else
                 if (device.port == 8008 || device.port == 8009) {
                     "TV này được phát hiện qua Google Cast (port ${device.port}). " +
                         "Google Cast chỉ dùng để phát hiện thiết bị, không phải kênh điều khiển remote. " +

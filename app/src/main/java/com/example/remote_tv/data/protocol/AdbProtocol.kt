@@ -77,13 +77,36 @@ class AdbProtocol : TVProtocol {
 
     override suspend fun connect(ip: String, port: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            InAppDiagnostics.info(TAG, "ADB connect $ip:$port")
-            val s = Socket()
-            s.connect(InetSocketAddress(ip, port), 3000)
+            val targets = buildConnectTargets(ip)
+            InAppDiagnostics.info(TAG, "ADB connect target=$ip:$port candidates=${targets.joinToString()}")
+
+            var s: Socket? = null
+            var connectedTarget: String? = null
+
+            targets.forEach { target ->
+                if (s != null) return@forEach
+
+                val candidateSocket = Socket()
+                try {
+                    candidateSocket.connect(InetSocketAddress(target, port), 3000)
+                    s = candidateSocket
+                    connectedTarget = target
+                } catch (candidateError: Exception) {
+                    InAppDiagnostics.warn(
+                        TAG,
+                        "ADB candidate failed $target:$port => ${candidateError::class.simpleName}: ${candidateError.message}"
+                    )
+                    runCatching { candidateSocket.close() }
+                }
+            }
+
+            val connectedSocket = s ?: return@withContext false
             s.soTimeout = 4000
-            socket = s
-            input  = DataInputStream(s.getInputStream())
-            output = DataOutputStream(s.getOutputStream())
+            socket = connectedSocket
+            input  = DataInputStream(connectedSocket.getInputStream())
+            output = DataOutputStream(connectedSocket.getOutputStream())
+
+            InAppDiagnostics.info(TAG, "ADB socket connected via ${connectedTarget ?: ip}")
 
             send(A_CNXN, ADB_VERSION, MAX_DATA, "host::remote_tv\u0000".toByteArray())
 
@@ -154,6 +177,14 @@ class AdbProtocol : TVProtocol {
     override suspend fun sendCommand(command: String): Boolean = withContext(Dispatchers.IO) {
         if (!isConnected) return@withContext false
 
+        if (command.startsWith("SEARCH_QUERY:")) {
+            val query = command.removePrefix("SEARCH_QUERY:").trim()
+            if (query.isBlank()) {
+                return@withContext false
+            }
+            return@withContext sendSearchQuery(query)
+        }
+
         if (command.startsWith("TEXT:")) {
             val rawText = command.substring(5)
             val normalized = Normalizer.normalize(rawText, Normalizer.Form.NFC)
@@ -167,7 +198,7 @@ class AdbProtocol : TVProtocol {
             }
 
             // For stability, use input text first for common cases.
-            // Clipboard paste is kept as fallback for complex Unicode payloads.
+            // For Unicode, try cmd input and clipboard before classic input fallback.
             val hasNonAscii = normalized.any { ch -> ch.code > 127 }
 
             if (!hasNonAscii) {
@@ -185,6 +216,12 @@ class AdbProtocol : TVProtocol {
                     InAppDiagnostics.error(TAG, "ADB text failed on both input and clipboard paths")
                 }
                 return@withContext pasted
+            }
+
+            val sentByCmdInput = sendTextViaCmdInput(normalized)
+            if (sentByCmdInput) {
+                InAppDiagnostics.info(TAG, "ADB text sent via cmd input (unicode path)")
+                return@withContext true
             }
 
             val pasted = sendTextViaClipboard(normalized)
@@ -216,31 +253,37 @@ class AdbProtocol : TVProtocol {
     }
 
     private suspend fun sendTextByInputCommand(text: String): Boolean {
-        val parts = Regex("\\s+|\\S+").findAll(text).map { it.value }.toList()
+        val encoded = encodeForAndroidInputText(text)
+        val chunks = encoded.chunked(36)
 
-        parts.forEach { part ->
-            if (part.isBlank()) {
-                repeat(part.length) {
-                    if (!sendShellCommand("input keyevent 62\n")) {
-                        return false
-                    }
-                    delay(20)
-                }
-                return@forEach
+        chunks.forEachIndexed { index, chunk ->
+            val escaped = escapeForShellDoubleQuoted(chunk)
+            val sent = sendShellCommand("input text \"$escaped\"\n")
+            if (!sent) {
+                InAppDiagnostics.error(TAG, "ADB TEXT input failed at chunk ${index + 1}/${chunks.size}")
+                return false
             }
 
-            val chunks = part.chunked(20)
-            chunks.forEachIndexed { index, chunk ->
-                val escaped = escapeForShellDoubleQuoted(chunk)
-                val sent = sendShellCommand("input text \"$escaped\"\n")
-                if (!sent) {
-                    InAppDiagnostics.error(TAG, "ADB TEXT fallback failed at chunk ${index + 1}/${chunks.size}")
-                    return false
-                }
+            if (index < chunks.lastIndex) {
+                delay(35)
+            }
+        }
 
-                if (index < chunks.lastIndex) {
-                    delay(40)
-                }
+        return true
+    }
+
+    private suspend fun sendTextViaCmdInput(text: String): Boolean {
+        val chunks = text.chunked(24)
+        chunks.forEachIndexed { index, chunk ->
+            val escaped = escapeForShellDoubleQuoted(chunk)
+            val sent = sendShellCommand("cmd input text \"$escaped\"\n")
+            if (!sent) {
+                InAppDiagnostics.warn(TAG, "ADB cmd input failed at chunk ${index + 1}/${chunks.size}")
+                return false
+            }
+
+            if (index < chunks.lastIndex) {
+                delay(25)
             }
         }
 
@@ -265,12 +308,82 @@ class AdbProtocol : TVProtocol {
             .replace("`", "\\`")
     }
 
+    private fun encodeForAndroidInputText(value: String): String {
+        // Android input text uses %s as the canonical space token.
+        return buildString(value.length * 2) {
+            value.forEach { ch ->
+                when (ch) {
+                    ' ' -> append("%s")
+                    else -> append(ch)
+                }
+            }
+        }
+    }
+
+    private fun buildConnectTargets(ip: String): List<String> {
+        val trimmed = ip.trim()
+        if (trimmed.isBlank()) return emptyList()
+
+        val base = trimmed.substringBefore('%')
+        val isIpv6LinkLocal = base.contains(":") && base.startsWith("fe80", ignoreCase = true)
+        if (!isIpv6LinkLocal) {
+            return listOf(trimmed)
+        }
+
+        if (trimmed.contains("%")) {
+            return listOf(trimmed)
+        }
+
+        val scoped = listOf("wlan0", "eth0", "ap0", "swlan0").map { scope ->
+            "$base%$scope"
+        }
+
+        // Keep the original unscoped target as last fallback for devices that resolve scope internally.
+        return (scoped + base).distinct()
+    }
+
+    private fun sendSearchQuery(query: String): Boolean {
+        val escaped = escapeForShellDoubleQuoted(query)
+
+        val searchResult = sendShellCommandDetailed(
+            "am start -a android.intent.action.SEARCH --es query \"$escaped\"\n"
+        )
+        if (searchResult.success) {
+            InAppDiagnostics.info(TAG, "ADB search intent success: ACTION_SEARCH")
+            return true
+        }
+
+        val webSearchResult = sendShellCommandDetailed(
+            "am start -a android.intent.action.WEB_SEARCH --es query \"$escaped\"\n"
+        )
+        if (webSearchResult.success) {
+            InAppDiagnostics.info(TAG, "ADB search intent success: ACTION_WEB_SEARCH")
+            return true
+        }
+
+        InAppDiagnostics.warn(
+            TAG,
+            "ADB search intent failed for query='${query.take(32)}'"
+        )
+        return false
+    }
+
     private fun sendShellCommand(shellCmd: String): Boolean {
+        return sendShellCommandDetailed(shellCmd).success
+    }
+
+    private data class ShellCommandResult(
+        val success: Boolean,
+        val output: String,
+    )
+
+    private fun sendShellCommandDetailed(shellCmd: String): ShellCommandResult {
         return try {
             send(A_WRTE, localId, remoteId, shellCmd.toByteArray())
 
             var receivedOkay = false
             var guard = 0
+            val outputBuilder = StringBuilder()
 
             while (guard < 16) {
                 val msg = read() ?: break
@@ -280,21 +393,41 @@ class AdbProtocol : TVProtocol {
                         break
                     }
                     A_WRTE -> {
+                        if (msg.data.isNotEmpty()) {
+                            outputBuilder.append(String(msg.data, Charsets.UTF_8))
+                        }
                         // Ack shell output frame to keep the stream healthy.
                         send(A_OKAY, localId, remoteId, ByteArray(0))
                     }
                     A_CLSE -> {
                         send(A_CLSE, localId, remoteId, ByteArray(0))
-                        return false
+                        return ShellCommandResult(success = false, output = outputBuilder.toString())
                     }
                 }
                 guard++
             }
 
-            receivedOkay
+            val output = outputBuilder.toString().trim()
+            val hasErrorText = looksLikeShellError(output)
+            if (hasErrorText) {
+                InAppDiagnostics.warn(TAG, "ADB shell output error: ${output.take(160)}")
+            }
+            ShellCommandResult(success = receivedOkay && !hasErrorText, output = output)
         } catch (e: Exception) {
-            InAppDiagnostics.error(TAG, "ADB sendCommand failed: ${e.message}"); false
+            InAppDiagnostics.error(TAG, "ADB sendCommand failed: ${e.message}")
+            ShellCommandResult(success = false, output = e.message ?: "")
         }
+    }
+
+    private fun looksLikeShellError(output: String): Boolean {
+        if (output.isBlank()) return false
+        val normalized = output.lowercase()
+        return normalized.contains("unknown command") ||
+            normalized.contains("not found") ||
+            normalized.contains("can't find service") ||
+            normalized.contains("error:") ||
+            normalized.contains("exception") ||
+            normalized.contains("usage:")
     }
 
     override suspend fun launchApp(appId: String): Boolean = withContext(Dispatchers.IO) {

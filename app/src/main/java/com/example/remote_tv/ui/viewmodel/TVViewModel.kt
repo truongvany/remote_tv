@@ -233,7 +233,17 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun sendText(text: String) = sendCommand("TEXT:$text")
+    fun sendText(text: String) {
+        viewModelScope.launch {
+            val normalized = text.trim()
+            if (normalized.isBlank()) return@launch
+
+            val sent = sendCommandInternal("TEXT:$normalized")
+            if (!sent) {
+                _uiState.update { it.copy(actionMessage = "Cannot send text on current TV connection") }
+            }
+        }
+    }
 
     fun sendVoiceQuery(query: String) {
         viewModelScope.launch {
