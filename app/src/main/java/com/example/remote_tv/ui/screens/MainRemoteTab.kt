@@ -1,6 +1,7 @@
 package com.example.remote_tv.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.speech.RecognitionListener
@@ -52,6 +53,62 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         }
     }
 
+    val systemVoiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = { result ->
+            isVoiceListening = false
+            voiceRmsLevel = 0f
+
+            if (result.resultCode != Activity.RESULT_OK) {
+                voiceStatusText = "Voice input cancelled"
+                return@rememberLauncherForActivityResult
+            }
+
+            val spokenText = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+
+            if (spokenText.isNotEmpty()) {
+                voiceTranscript = spokenText
+                voiceStatusText = "Sending to TV..."
+                viewModel.sendVoiceQuery(spokenText)
+            } else {
+                voiceStatusText = "No speech detected"
+            }
+        }
+    )
+
+    val startSystemVoiceRecognition = startSystemVoiceRecognition@{
+        val systemIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now")
+        }
+
+        val hasSpeechActivity = systemIntent.resolveActivity(context.packageManager) != null
+        if (!hasSpeechActivity) {
+            val message = "No speech input app found on this phone"
+            voiceStatusText = message
+            viewModel.showActionMessage(message)
+            return@startSystemVoiceRecognition
+        }
+
+        voiceRmsLevel = 0f
+        voiceStatusText = "Opening voice input..."
+        isVoiceListening = false
+
+        runCatching {
+            systemVoiceLauncher.launch(systemIntent)
+        }.onFailure {
+            val message = "Cannot open voice input"
+            voiceStatusText = message
+            viewModel.showActionMessage(message)
+        }
+    }
+
     val startVoiceRecognition = {
         voiceTranscript = ""
         voiceStatusText = "Starting microphone..."
@@ -60,17 +117,13 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         isVoiceListening = true
 
         if (speechRecognizer == null) {
-            voiceStatusText = "Voice recognizer is unavailable on this device"
-            isVoiceListening = false
-            viewModel.sendCommand("KEY_VOICE")
+            startSystemVoiceRecognition()
         } else {
             runCatching {
                 speechRecognizer.cancel()
                 speechRecognizer.startListening(recognizerIntent)
             }.onFailure {
-                voiceStatusText = "Cannot start listening right now"
-                isVoiceListening = false
-                viewModel.sendCommand("KEY_VOICE")
+                startSystemVoiceRecognition()
             }
         }
     }
@@ -81,7 +134,8 @@ fun MainRemoteTab(viewModel: TVViewModel) {
             if (granted) {
                 startVoiceRecognition()
             } else {
-                voiceStatusText = "Microphone permission is required"
+                // Fallback to system voice UI; it can still work even when app mic permission is denied.
+                startSystemVoiceRecognition()
             }
         }
     )
@@ -108,6 +162,8 @@ fun MainRemoteTab(viewModel: TVViewModel) {
             }
 
             override fun onError(error: Int) {
+                val wasListening = isVoiceListening
+
                 if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && !busyRetryAttempted) {
                     busyRetryAttempted = true
                     runCatching {
@@ -122,9 +178,18 @@ fun MainRemoteTab(viewModel: TVViewModel) {
 
                 isVoiceListening = false
                 voiceRmsLevel = 0f
-                voiceStatusText = speechErrorMessage(error)
-                if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    viewModel.sendCommand("KEY_VOICE")
+                val errorMessage = speechErrorMessage(error)
+                voiceStatusText = errorMessage
+
+                if (!wasListening) {
+                    return
+                }
+
+                if (error == SpeechRecognizer.ERROR_CLIENT ||
+                    error == SpeechRecognizer.ERROR_SERVER ||
+                    error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
+                ) {
+                    startSystemVoiceRecognition()
                 }
             }
 
@@ -282,12 +347,12 @@ fun MainRemoteTab(viewModel: TVViewModel) {
 private fun speechErrorMessage(errorCode: Int): String {
     return when (errorCode) {
         SpeechRecognizer.ERROR_AUDIO -> "Audio input error"
-        SpeechRecognizer.ERROR_CLIENT -> "Voice recognition interrupted"
+        SpeechRecognizer.ERROR_CLIENT -> "Voice input is unavailable on this profile"
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission missing"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network issue while recognizing"
         SpeechRecognizer.ERROR_NO_MATCH -> "Could not understand that, try again"
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Voice recognizer is busy"
-        SpeechRecognizer.ERROR_SERVER -> "Speech service is unavailable"
+        SpeechRecognizer.ERROR_SERVER -> "Speech service is unavailable for this account"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
         else -> "Voice recognition failed"
     }

@@ -651,6 +651,10 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(actionMessage = null) }
     }
 
+    fun showActionMessage(message: String) {
+        _uiState.update { it.copy(actionMessage = message) }
+    }
+
     fun setThemeMode(themeMode: AppThemeMode) {
         viewModelScope.launch {
             appPreferencesRepository.setThemeMode(themeMode)

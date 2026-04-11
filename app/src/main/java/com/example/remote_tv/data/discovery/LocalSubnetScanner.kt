@@ -101,12 +101,13 @@ class LocalSubnetScanner(context: Context) {
 
     private fun buildScannedDevice(ipAddress: String, port: Int): TVDevice {
         val brand = when (port) {
-            8002, 8009 -> TVBrand.SAMSUNG
+            8002, 8001 -> TVBrand.SAMSUNG
             3000 -> TVBrand.LG
             8060 -> TVBrand.ROKU
             7236 -> TVBrand.FIRE_TV
             6466, 6467, 8008 -> TVBrand.ANDROID_TV
             5555 -> TVBrand.UNKNOWN
+            8009 -> TVBrand.UNKNOWN
             else -> TVBrand.UNKNOWN
         }
 
@@ -116,7 +117,11 @@ class LocalSubnetScanner(context: Context) {
             TVBrand.ROKU -> "Roku TV"
             TVBrand.FIRE_TV -> "Fire TV"
             TVBrand.ANDROID_TV -> "Android TV"
-            TVBrand.UNKNOWN -> if (port == 5555) "ADB Device" else "TV Device"
+            TVBrand.UNKNOWN -> when (port) {
+                5555 -> "ADB Device"
+                8009 -> "Cast Device"
+                else -> "TV Device"
+            }
         }
 
         return TVDevice(

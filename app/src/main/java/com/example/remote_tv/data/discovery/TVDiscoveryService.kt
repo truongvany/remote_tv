@@ -7,6 +7,8 @@ import android.util.Log
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
+import java.net.Inet4Address
+import java.net.InetAddress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +26,7 @@ class TVDiscoveryService(context: Context) {
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val subnetScanner = LocalSubnetScanner(context)
     private val discoveryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val quickScanPorts = listOf(8008, 8009, 5555, 6466, 6467)
     private val defaultScanPorts = listOf(6466, 6467, 5555, 8008, 8009, 8002, 8060, 3000, 7236)
     private val deviceLock = Any()
 
@@ -81,9 +84,26 @@ class TVDiscoveryService(context: Context) {
 
         deepScanJob = discoveryScope.launch {
             try {
-                val scannedDevices = subnetScanner.scan(defaultScanPorts)
-                scannedDevices.forEach { updateDeviceList(it) }
-                InAppDiagnostics.info(TAG, "Subnet scan finished. devices=${scannedDevices.size}")
+                // Stage 1: quick scan for Android TV / Google TV related ports.
+                val quickDevices = subnetScanner.scan(
+                    candidatePorts = quickScanPorts,
+                    connectTimeoutMs = 120,
+                    maxConcurrency = 96,
+                )
+                quickDevices.forEach { updateDeviceList(it) }
+                InAppDiagnostics.info(TAG, "Quick subnet scan finished. devices=${quickDevices.size}")
+
+                // Stage 2: broader scan for other brands and fallback services.
+                val remainingPorts = (defaultScanPorts - quickScanPorts.toSet()).distinct()
+                if (remainingPorts.isNotEmpty()) {
+                    val scannedDevices = subnetScanner.scan(
+                        candidatePorts = remainingPorts,
+                        connectTimeoutMs = 180,
+                        maxConcurrency = 64,
+                    )
+                    scannedDevices.forEach { updateDeviceList(it) }
+                    InAppDiagnostics.info(TAG, "Full subnet scan finished. devices=${scannedDevices.size}")
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
@@ -126,7 +146,7 @@ class TVDiscoveryService(context: Context) {
                     }
 
                     override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
-                        val host = serviceInfo.host?.hostAddress ?: return
+                        val host = resolveServiceHostAddress(serviceInfo) ?: return
                         val name = serviceInfo.serviceName
                         val brand = when {
                             serviceInfo.serviceType.contains("androidtvremote2", true) -> TVBrand.ANDROID_TV
@@ -213,6 +233,43 @@ class TVDiscoveryService(context: Context) {
         }
 
         return score
+    }
+
+    private fun resolveServiceHostAddress(serviceInfo: NsdServiceInfo): String? {
+        val rawAddress = serviceInfo.host?.hostAddress?.trim().orEmpty()
+        val hostName = serviceInfo.host?.hostName?.trim().orEmpty()
+
+        if (rawAddress.isNotBlank() && !isIpv6LinkLocal(rawAddress)) {
+            return rawAddress
+        }
+
+        val ipv4FromHostName = resolveIpv4FromHostName(hostName)
+        if (ipv4FromHostName != null) {
+            InAppDiagnostics.info(
+                TAG,
+                "Resolved IPv4 fallback for ${serviceInfo.serviceName}: $ipv4FromHostName (raw=${rawAddress.ifBlank { "n/a" }})"
+            )
+            return ipv4FromHostName
+        }
+
+        return rawAddress.takeIf { it.isNotBlank() }
+    }
+
+    private fun resolveIpv4FromHostName(hostName: String): String? {
+        if (hostName.isBlank()) return null
+
+        return runCatching {
+            InetAddress.getAllByName(hostName)
+                .firstOrNull { address ->
+                    address is Inet4Address && !address.isLoopbackAddress
+                }
+                ?.hostAddress
+        }.getOrNull()
+    }
+
+    private fun isIpv6LinkLocal(address: String): Boolean {
+        val normalized = address.substringBefore('%')
+        return normalized.contains(':') && normalized.startsWith("fe80", ignoreCase = true)
     }
 }
 

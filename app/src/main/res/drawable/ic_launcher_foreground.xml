@@ -4,74 +4,49 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
-    <!-- Remote body centered in foreground -->
-    <path
-        android:fillColor="#1a1a2e"
-        android:strokeColor="#00d4ff"
-        android:strokeWidth="1.5"
-        android:pathData="M 34,24 Q 27,24 27,30 L 27,78 Q 27,84 34,84 L 74,84 Q 81,84 81,78 L 81,30 Q 81,24 74,24 Z" />
-    
-    <!-- Top left button -->
-    <path
-        android:fillColor="#00d4ff"
-        android:pathData="M 48,36 m -2.5,0 a 2.5,2.5 0 1,1 5,0 a 2.5,2.5 0 1,1 -5,0" />
-    
-    <!-- Top right button -->
-    <path
-        android:fillColor="#00d4ff"
-        android:pathData="M 60,36 m -2.5,0 a 2.5,2.5 0 1,1 5,0 a 2.5,2.5 0 1,1 -5,0" />
-    
-    <!-- Center large button (outer ring) -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#00d4ff"
-        android:strokeWidth="1"
-        android:pathData="M 54,48 m -9,0 a 9,9 0 1,1 18,0 a 9,9 0 1,1 -18,0" />
-    
-    <!-- Center large button (inner circle) -->
-    <path
-        android:fillColor="#1a0033"
-        android:strokeColor="#00d4ff"
-        android:strokeWidth="0.8"
-        android:pathData="M 54,48 m -5,0 a 5,5 0 1,1 10,0 a 5,5 0 1,1 -10,0" />
-    
-    <!-- Left side button -->
-    <path
-        android:fillColor="#00d4ff"
-        android:pathData="M 41,54 m -2,0 a 2,2 0 1,1 4,0 a 2,2 0 1,1 -4,0" />
-    
-    <!-- Right side button -->
-    <path
-        android:fillColor="#00d4ff"
-        android:pathData="M 67,54 m -2,0 a 2,2 0 1,1 4,0 a 2,2 0 1,1 -4,0" />
-    
-    <!-- Center down button -->
-    <path
-        android:fillColor="#00d4ff"
-        android:pathData="M 54,65 m -2,0 a 2,2 0 1,1 4,0 a 2,2 0 1,1 -4,0" />
-    
-    <!-- Bottom left button -->
-    <path
-        android:fillColor="#00d4ff"
-        android:pathData="M 48,72 m -2,0 a 2,2 0 1,1 4,0 a 2,2 0 1,1 -4,0" />
-    
-    <!-- Bottom right button -->
-    <path
-        android:fillColor="#00d4ff"
-        android:pathData="M 60,72 m -2,0 a 2,2 0 1,1 4,0 a 2,2 0 1,1 -4,0" />
-    
-    <!-- WiFi wave 1 -->
+        android:strokeColor="#FFF5B15E"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M39,24q15,-14 30,0" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#00d4ff"
-        android:strokeWidth="0.8"
-        android:pathData="M 54,12 Q 60,18 66,22" />
-    
-    <!-- WiFi wave 2 -->
+        android:strokeColor="#FFFF8A00"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M32,28q22,-22 44,0" />
+    <path
+        android:fillColor="#FF171D27"
+        android:strokeColor="#FFFF8A00"
+        android:strokeWidth="2"
+        android:pathData="M43,30h22q5,0 5,5v43q0,5 -5,5H43q-5,0 -5,-5V35q0,-5 5,-5z" />
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#00d4ff"
-        android:strokeWidth="0.8"
-        android:pathData="M 54,8 Q 62,14 70,20" />
+        android:strokeColor="#FFFFB74D"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M54,36v4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFB74D"
+        android:strokeWidth="1.8"
+        android:pathData="M54,40m-4.6,0a4.6,4.6 0 1,1 9.2,0a4.6,4.6 0 1,1 -9.2,0" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFF8A00"
+        android:strokeWidth="1.8"
+        android:pathData="M54,54m-8,0a8,8 0 1,1 16,0a8,8 0 1,1 -16,0" />
+    <path
+        android:fillColor="#FFFF8A00"
+        android:pathData="M54,54m-2.7,0a2.7,2.7 0 1,1 5.4,0a2.7,2.7 0 1,1 -5.4,0" />
+    <path
+        android:fillColor="#FFFFB74D"
+        android:pathData="M47,66h14v2.4H47z" />
+    <path
+        android:fillColor="#FFFFB74D"
+        android:pathData="M47,72h14v2.4H47z" />
+    <path
+        android:fillColor="#FFFFB74D"
+        android:pathData="M47,78h14v2.4H47z" />
 </vector>
