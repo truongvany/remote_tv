@@ -13,6 +13,8 @@ import com.example.remote_tv.data.protocol.LGProtocol
 import com.example.remote_tv.data.protocol.SamsungProtocol
 import com.example.remote_tv.data.protocol.TVProtocol
 import io.ktor.client.HttpClient
+import java.net.InetSocketAddress
+import java.net.Socket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -47,8 +49,7 @@ class TVConnectionManager(private val client: HttpClient) {
 
     fun connect(device: TVDevice) {
         if (_connectingDeviceKey.value != null) {
-            InAppDiagnostics.warn(TAG, "[CONNECT_ATTEMPT] Ignored: another connection is in progress")
-            return
+            InAppDiagnostics.warn(TAG, "[CONNECT_ATTEMPT] Cancel previous pending connect and start new target")
         }
 
         val targetKey = device.toConnectionKey()
@@ -178,14 +179,40 @@ class TVConnectionManager(private val client: HttpClient) {
     private suspend fun connectByPortHeuristics(device: TVDevice): TVProtocol? {
         return when (device.port) {
             8002, 8001 -> connectSamsungTV(device)
-            3000, 8008 -> connectLGTV(device)
+            3000 -> connectLGTV(device)
+            8008 -> connectAndroidTV(device)
+            8009 -> connectAndroidOrSamsungFromCastPort(device)
             6466, 6467 -> connectAndroidTV(device)
             5555 -> connectViaAdb(device)  // ADB over TCP
             else -> null
         }
     }
 
+    private suspend fun connectAndroidOrSamsungFromCastPort(device: TVDevice): TVProtocol? {
+        val androidPath = connectAndroidTV(device)
+        if (androidPath != null) {
+            return androidPath
+        }
+
+        InAppDiagnostics.warn(
+            TAG,
+            "Port 8009 is ambiguous (Cast/Samsung). Android path failed, trying Samsung fallback."
+        )
+        return connectSamsungTV(device.copy(brand = TVBrand.SAMSUNG))
+    }
+
     private suspend fun connectViaAdb(device: TVDevice): TVProtocol? {
+        if (shouldRunAdbPortPrecheck(device.ipAddress)) {
+            val adbPortOpen = isTcpPortOpen(device.ipAddress, 5555, timeoutMs = 650)
+            if (!adbPortOpen) {
+                InAppDiagnostics.warn(
+                    TAG,
+                    "[ADB_CONNECT] precheck failed: ${device.ipAddress}:5555 is closed/unreachable"
+                )
+                return null
+            }
+        }
+
         val adb = AdbProtocol()
         currentConnectAttemptCount++
         val startTime = android.os.SystemClock.elapsedRealtime()
@@ -204,6 +231,20 @@ class TVConnectionManager(private val client: HttpClient) {
         }
         InAppDiagnostics.warn(TAG, "[ADB_CONNECT] failed elapsed=${elapsed}ms")
         return null
+    }
+
+    private fun shouldRunAdbPortPrecheck(ipAddress: String): Boolean {
+        val normalized = ipAddress.trim().substringBefore('%')
+        return normalized.contains('.')
+    }
+
+    private fun isTcpPortOpen(ipAddress: String, port: Int, timeoutMs: Int): Boolean {
+        return runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(ipAddress, port), timeoutMs)
+            }
+            true
+        }.getOrElse { false }
     }
 
     private fun buildConnectionError(device: TVDevice): String {
