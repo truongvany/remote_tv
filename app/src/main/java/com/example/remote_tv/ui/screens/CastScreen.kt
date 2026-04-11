@@ -1,7 +1,12 @@
 package com.example.remote_tv.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,14 +27,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.mediarouter.app.MediaRouteButton
+import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
-import com.example.remote_tv.ui.theme.CardBackground
-import com.example.remote_tv.ui.theme.OrangeAccent
-import com.example.remote_tv.ui.theme.TextSecondary
+import com.google.android.gms.cast.framework.CastButtonFactory
 
 @Composable
 fun CastScreen(
@@ -43,12 +50,19 @@ fun CastScreen(
     localIpAddress: String?,
     localSubnet: String?,
     diagnosticLogs: List<String>,
+    isCastSessionActive: Boolean,
+    castStatus: String,
     onRequestPermission: () -> Unit,
     onRefreshScan: () -> Unit,
     onDeviceSelected: (TVDevice) -> Unit,
     onClearDiagnostics: () -> Unit,
+    onScreenMirroringClick: () -> Unit = {},
+    onPickImage: () -> Unit = {},
+    onPickVideo: () -> Unit = {},
+    onStopCasting: () -> Unit = {},
 ) {
     var showDebugInfo by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -62,29 +76,56 @@ fun CastScreen(
 
         Spacer(modifier = Modifier.height(40.dp))
         
-        // Scanning Animation Area
         ScanningAnimationArea()
 
         Spacer(modifier = Modifier.height(32.dp))
         
         Text(
             text = "SCANNING",
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 28.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 2.sp
         )
         Text(
             text = if (isScanning) "DETECTING NEARBY DISPLAYS..." else "SCAN COMPLETE",
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp
         )
 
+        Spacer(modifier = Modifier.height(12.dp))
+        CastSessionStatusPill(
+            isActive = isCastSessionActive,
+            status = castStatus,
+        )
+        if (!isCastSessionActive) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Tip: Connect a TV in the list to push media directly, or use cast icon (top-right)",
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = {
+                    openCastSettings(context)
+                    Toast.makeText(context, "Choose Google TV in Cast settings first", Toast.LENGTH_SHORT).show()
+                },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+            ) {
+                Icon(Icons.Filled.Cast, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Connect Cast Session", fontWeight = FontWeight.Bold)
+            }
+        }
+
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Nearby Devices Section
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -92,7 +133,7 @@ fun CastScreen(
         ) {
             Text(
                 "NEARBY DEVICES",
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onTertiary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
@@ -100,7 +141,7 @@ fun CastScreen(
             )
             Text(
                 text = if (showDebugInfo) "HIDE DEBUG" else "DEBUG INFO",
-                color = Color(0xFFFFB38F),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
@@ -108,7 +149,7 @@ fun CastScreen(
             )
             Text(
                 "REFRESH",
-                color = OrangeAccent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
@@ -163,10 +204,9 @@ fun CastScreen(
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        // Quick Actions Section
         Text(
             text = "QUICK ACTIONS",
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onTertiary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,
@@ -174,13 +214,40 @@ fun CastScreen(
         )
         Spacer(modifier = Modifier.height(16.dp))
         
-        ScreenMirroringCard()
+        ScreenMirroringCard(onClick = onScreenMirroringClick)
         
         Spacer(modifier = Modifier.height(16.dp))
         
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            QuickActionItem(Icons.Filled.PlayCircle, "YouTube", Color(0xFF2D1010), Color.Red, Modifier.weight(1f))
-            QuickActionItem(Icons.Filled.PhotoLibrary, "Photos", Color(0xFF10182D), Color(0xFF4285F4), Modifier.weight(1f))
+            QuickActionItem(
+                Icons.Filled.PhotoLibrary,
+                "Cast Image",
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                MaterialTheme.colorScheme.primary,
+                Modifier.weight(1f),
+                onClick = onPickImage,
+            )
+            QuickActionItem(
+                Icons.Filled.PlayCircle,
+                "Cast Video",
+                Color.Red.copy(alpha = 0.1f),
+                Color.Red,
+                Modifier.weight(1f),
+                onClick = onPickVideo,
+            )
+        }
+
+        if (isCastSessionActive) {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onStopCasting,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+            ) {
+                Icon(Icons.Filled.StopCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Stop Casting", fontWeight = FontWeight.Bold)
+            }
         }
 
         Spacer(modifier = Modifier.height(120.dp))
@@ -188,14 +255,44 @@ fun CastScreen(
 }
 
 @Composable
+private fun CastSessionStatusPill(isActive: Boolean, status: String) {
+    val color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+    val background = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.secondary
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(background)
+            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(color, CircleShape)
+        )
+        Text(
+            text = status,
+            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 fun ScanningAnimationArea() {
     val infiniteTransition = rememberInfiniteTransition(label = "scanning")
+    val pulseColor = MaterialTheme.colorScheme.primary
+    val pulseDurationMs = 2200
     
     val scale1 by infiniteTransition.animateFloat(
         initialValue = 0.5f,
         targetValue = 1.5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
+            animation = tween(pulseDurationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ), label = "scale1"
     )
@@ -204,35 +301,78 @@ fun ScanningAnimationArea() {
         initialValue = 1f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
+            animation = tween(pulseDurationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ), label = "alpha1"
     )
 
+    val scale2 by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset(pulseDurationMs / 3)
+        ), label = "scale2"
+    )
+
+    val alpha2 by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset(pulseDurationMs / 3)
+        ), label = "alpha2"
+    )
+
+    val scale3 by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset((pulseDurationMs / 3) * 2)
+        ), label = "scale3"
+    )
+
+    val alpha3 by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(pulseDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+            initialStartOffset = StartOffset((pulseDurationMs / 3) * 2)
+        ), label = "alpha3"
+    )
+
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
-        // Ripple Effect
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
-                color = OrangeAccent.copy(alpha = alpha1),
+                color = pulseColor.copy(alpha = alpha1 * 0.55f),
                 radius = (size.minDimension / 2) * scale1,
                 style = Stroke(width = 2.dp.toPx())
             )
             drawCircle(
-                color = OrangeAccent.copy(alpha = alpha1 * 0.5f),
-                radius = (size.minDimension / 2) * (scale1 * 0.7f),
-                style = Stroke(width = 1.dp.toPx())
+                color = pulseColor.copy(alpha = alpha2 * 0.42f),
+                radius = (size.minDimension / 2) * scale2,
+                style = Stroke(width = 2.dp.toPx())
+            )
+            drawCircle(
+                color = pulseColor.copy(alpha = alpha3 * 0.32f),
+                radius = (size.minDimension / 2) * scale3,
+                style = Stroke(width = 2.dp.toPx())
             )
         }
         
-        // Center Core
         Box(
             modifier = Modifier
                 .size(90.dp)
-                .background(OrangeAccent, CircleShape)
-                .border(4.dp, Color(0xFFB34A2A).copy(alpha = 0.5f), CircleShape),
+                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                .border(4.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.Cast, contentDescription = null, tint = Color.Black, modifier = Modifier.size(36.dp))
+            Icon(Icons.Filled.Cast, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(36.dp))
         }
     }
 }
@@ -250,8 +390,8 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, on
             .fillMaxWidth()
             .height(84.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(if (isConnected) Color(0xFF151515) else Color(0xFF0D0D0D))
-            .then(if (isConnected) Modifier.border(1.dp, OrangeAccent.copy(alpha = 0.3f), RoundedCornerShape(24.dp)) else Modifier)
+            .background(if (isConnected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary)
+            .then(if (isConnected) Modifier.border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(24.dp)) else Modifier)
             .clickable(enabled = !isConnecting) { onClick() }
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.CenterStart
@@ -260,21 +400,21 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, on
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(Color(0xFF1A1A1A), RoundedCornerShape(14.dp)),
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = iconForBrand(device.brand),
                     contentDescription = null,
-                    tint = if (isConnected) OrangeAccent else Color.Gray
+                    tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column {
-                Text(device.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(device.name, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
                     status,
-                    color = if (isConnected || isConnecting) OrangeAccent else Color.Gray,
+                    color = if (isConnected || isConnecting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -285,18 +425,18 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, on
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = OrangeAccent,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 } else {
                     Icon(
                         Icons.Filled.SignalCellularAlt,
                         contentDescription = null,
-                        tint = if (isConnected) OrangeAccent else Color(0xFF333333)
+                        tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                     )
                 }
                 Text(
                     text = "${device.ipAddress}:${device.port}",
-                    color = Color(0xFF7A7A7A),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     fontSize = 10.sp,
                 )
             }
@@ -309,7 +449,7 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, on
                     .offset(x = (-20).dp)
                     .width(4.dp)
                     .height(30.dp)
-                    .background(OrangeAccent, RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
             )
         }
     }
@@ -321,29 +461,29 @@ private fun PermissionRequiredCard(onRequestPermission: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF121212))
-            .border(1.dp, OrangeAccent.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.secondary)
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
             .padding(20.dp)
     ) {
         Column(horizontalAlignment = Alignment.Start) {
             Text(
                 text = "Location Permission Required",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSecondary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Grant location permission to scan devices on your current Wi-Fi network.",
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f),
                 fontSize = 12.sp,
             )
             Spacer(modifier = Modifier.height(12.dp))
             Button(
                 onClick = onRequestPermission,
-                colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Grant Permission", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Grant Permission", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -355,17 +495,17 @@ private fun ScanErrorCard(message: String, onRetry: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF191113))
-            .border(1.dp, Color(0xFF7A2B2B), RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f))
+            .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(24.dp))
             .padding(20.dp)
     ) {
         Column {
-            Text("Scan error", color = Color(0xFFFF8A80), fontWeight = FontWeight.Bold)
+            Text("Scan error", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            Text(message, color = Color(0xFFE2B9B9), fontSize = 12.sp)
+            Text(message, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), fontSize = 12.sp)
             Spacer(modifier = Modifier.height(12.dp))
             TextButton(onClick = onRetry) {
-                Text("Try again", color = OrangeAccent)
+                Text("Try again", color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -377,21 +517,21 @@ private fun ConnectionErrorCard(message: String) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF1A1210))
-            .border(1.dp, Color(0xFF8A533E), RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.tertiary)
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
             .padding(20.dp)
     ) {
         Column {
             Text(
                 text = "Connection hint",
-                color = Color(0xFFFFC7A3),
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = message,
-                color = Color(0xFFE5C0AF),
+                color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.8f),
                 fontSize = 12.sp,
             )
         }
@@ -404,8 +544,8 @@ private fun EmptyDiscoveryCard(isScanning: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF0C0C0C))
-            .border(1.dp, Color(0xFF1F1F1F), RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.secondary)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(24.dp))
             .padding(20.dp)
     ) {
         Text(
@@ -414,7 +554,7 @@ private fun EmptyDiscoveryCard(isScanning: Boolean) {
             } else {
                 "No TV found. Tap REFRESH or use manual IP connection."
             },
-            color = Color(0xFFB3B3B3),
+            color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.5f),
             fontSize = 12.sp,
         )
     }
@@ -436,8 +576,8 @@ private fun DebugInfoCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF121212))
-            .border(1.dp, Color(0xFF2B2B2B), RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -448,31 +588,31 @@ private fun DebugInfoCard(
             ) {
                 Text(
                     text = "Debug Network Info",
-                    color = Color(0xFFFFB38F),
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 TextButton(onClick = onClearLogs) {
-                    Text("Clear Logs", color = Color(0xFFFFB38F), fontSize = 11.sp)
+                    Text("Clear Logs", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
                 }
             }
-            Text(text = "Local IP: $ipText", color = Color(0xFFE0E0E0), fontSize = 12.sp)
-            Text(text = "Subnet: $subnetText", color = Color(0xFFE0E0E0), fontSize = 12.sp)
+            Text(text = "Local IP: $ipText", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp)
+            Text(text = "Subnet: $subnetText", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp)
             Text(
                 text = "Permission: ${if (hasLocationPermission) "Granted" else "Missing"}",
-                color = Color(0xFF9E9E9E),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 fontSize = 11.sp,
             )
             Text(
                 text = "Scan status: ${if (isScanning) "Running" else "Idle"}",
-                color = Color(0xFF9E9E9E),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 fontSize = 11.sp,
             )
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "In-app Logs",
-                color = Color(0xFFFFB38F),
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -480,14 +620,14 @@ private fun DebugInfoCard(
             if (logs.isEmpty()) {
                 Text(
                     text = "No logs yet. Tap a TV or press remote buttons to capture events.",
-                    color = Color(0xFF8E8E8E),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     fontSize = 11.sp,
                 )
             } else {
                 logs.takeLast(12).forEach { line ->
                     Text(
                         text = line,
-                        color = Color(0xFFB9B9B9),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         fontSize = 10.sp,
                         lineHeight = 14.sp,
                     )
@@ -509,45 +649,40 @@ private fun iconForBrand(brand: TVBrand): ImageVector {
 }
 
 @Composable
-fun ScreenMirroringCard() {
+fun ScreenMirroringCard(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(130.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(CardBackground)
+            .background(MaterialTheme.colorScheme.tertiary)
+            .clickable { onClick() }
             .padding(24.dp)
     ) {
         Column {
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(OrangeAccent.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.AutoMirrored.Filled.ScreenShare, contentDescription = null, tint = OrangeAccent, modifier = Modifier.size(20.dp))
+                Icon(Icons.AutoMirrored.Filled.ScreenShare, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Screen Mirroring", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("Full device display broadcast", color = Color.Gray, fontSize = 12.sp)
+            Text("Screen Mirroring", color = MaterialTheme.colorScheme.onTertiary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Full device display broadcast", color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.6f), fontSize = 12.sp)
         }
-        Icon(
-            Icons.Filled.CastConnected, 
-            contentDescription = null, 
-            tint = Color(0xFF1A1A1A), 
-            modifier = Modifier.size(100.dp).align(Alignment.BottomEnd).offset(x = 20.dp, y = 20.dp)
-        )
     }
 }
 
 @Composable
-fun QuickActionItem(icon: ImageVector, title: String, bgColor: Color, iconColor: Color, modifier: Modifier = Modifier) {
+fun QuickActionItem(icon: ImageVector, title: String, bgColor: Color, iconColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     Box(
         modifier = modifier
             .height(120.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(CardBackground)
-            .clickable { }
+            .background(MaterialTheme.colorScheme.tertiary)
+            .clickable { onClick() }
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -561,7 +696,7 @@ fun QuickActionItem(icon: ImageVector, title: String, bgColor: Color, iconColor:
                 Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = MaterialTheme.colorScheme.onTertiary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -577,15 +712,15 @@ fun CastHeader() {
             Box(
                 modifier = Modifier
                     .size(28.dp)
-                    .background(OrangeAccent, RoundedCornerShape(6.dp)),
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.StayCurrentPortrait, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.StayCurrentPortrait, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = "COMMAND",
-                color = OrangeAccent,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 22.sp,
                 letterSpacing = 1.sp
@@ -593,14 +728,83 @@ fun CastHeader() {
         }
         
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(28.dp))
+            CastRouteChooserButton()
             Spacer(modifier = Modifier.width(20.dp))
             Box(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF252525))
+                    .background(MaterialTheme.colorScheme.secondary)
             )
         }
     }
+}
+
+@Composable
+private fun CastRouteChooserButton() {
+    val context = LocalContext.current
+
+    AndroidView(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), CircleShape)
+            .padding(4.dp),
+        factory = { viewContext ->
+            runCatching {
+                MediaRouteButton(viewContext).apply {
+                    runCatching {
+                        CastButtonFactory.setUpMediaRouteButton(viewContext, this)
+                    }.onFailure { error ->
+                        InAppDiagnostics.warn("CastScreen", "Cast route setup failed: ${error.message}")
+                        setOnClickListener { openCastSettings(viewContext) }
+                    }
+                    contentDescription = "Connect Cast Route"
+                }
+            }.getOrElse { error ->
+                InAppDiagnostics.warn("CastScreen", "MediaRouteButton unavailable: ${error.message}")
+                android.widget.ImageButton(viewContext).apply {
+                    setImageResource(android.R.drawable.ic_menu_share)
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    setOnClickListener { openCastSettings(viewContext) }
+                    contentDescription = "Open Cast Settings"
+                }
+            }
+        },
+        update = { button ->
+            if (button is MediaRouteButton) {
+                runCatching {
+                    CastButtonFactory.setUpMediaRouteButton(context, button)
+                }.onFailure { error ->
+                    InAppDiagnostics.warn("CastScreen", "Cast route update failed: ${error.message}")
+                    button.setOnClickListener { openCastSettings(context) }
+                }
+            } else {
+                button.setOnClickListener { openCastSettings(context) }
+            }
+        },
+    )
+}
+
+private fun openCastSettings(context: Context) {
+    val candidates = listOf(
+        Intent(Settings.ACTION_CAST_SETTINGS),
+        Intent("android.settings.CAST_SETTINGS"),
+        Intent("android.settings.WIFI_DISPLAY_SETTINGS"),
+        Intent(Settings.ACTION_SETTINGS),
+    )
+
+    for (intent in candidates) {
+        val launchIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val canHandle = launchIntent.resolveActivity(context.packageManager) != null
+        if (canHandle) {
+            runCatching {
+                context.startActivity(launchIntent)
+                return
+            }
+        }
+    }
+
+    InAppDiagnostics.warn("CastScreen", "No system activity available for Cast settings")
 }

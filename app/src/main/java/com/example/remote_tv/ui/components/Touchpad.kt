@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,7 +15,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_tv.ui.theme.ButtonBackground
 import kotlin.math.abs
 
 @Composable
@@ -29,7 +29,7 @@ fun Touchpad(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1.2f)
-            .background(ButtonBackground, RoundedCornerShape(28.dp))
+            .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(28.dp))
             .pointerInput(Unit) {
                 detectTapGestures(onTap = { onTap() })
             }
@@ -57,10 +57,9 @@ fun Touchpad(
     ) {
         Text(
             "Vuốt để điều hướng (Up/Down/Left/Right)\nChạm 1 lần để Chọn (OK)",
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.5f),
             fontSize = 16.sp,
             textAlign = TextAlign.Center
         )
     }
 }
-

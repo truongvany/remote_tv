@@ -7,14 +7,22 @@ import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.AppLaunchResult
 import com.example.remote_tv.data.model.PlaybackState
 import com.example.remote_tv.data.discovery.TVDiscoveryService
+import com.example.remote_tv.data.model.SavedDevice
+import com.example.remote_tv.data.model.TVApp
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.model.toSavedDevice
+import com.example.remote_tv.data.network.TVAppListFetcher
+import com.example.remote_tv.data.network.WakeOnLanSender
+import com.example.remote_tv.data.preferences.AppPreferencesRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.OkHttpClient
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -61,6 +69,11 @@ class TVRepositoryImpl(context: Context) : TVRepository {
 
     private val discoveryService = TVDiscoveryService(context)
     private val connectionManager = TVConnectionManager(httpClient)
+    private val appPrefs = AppPreferencesRepository(context)
+    private val appListFetcher = TVAppListFetcher(httpClient)
+
+    private val _installedApps = MutableStateFlow<List<TVApp>>(emptyList())
+    override val installedApps: StateFlow<List<TVApp>> = _installedApps.asStateFlow()
 
     init {
         // Khởi tạo RSA keypair dùng cho ADB authentication
@@ -101,6 +114,40 @@ class TVRepositoryImpl(context: Context) : TVRepository {
 
     override suspend fun launchApp(appId: String): AppLaunchResult {
         return connectionManager.launchApp(appId)
+    }
+
+    // ----------------------------------------------------------------
+    // Auto-Reconnect
+    // ----------------------------------------------------------------
+
+    override suspend fun saveLastDevice(device: TVDevice) {
+        appPrefs.saveLastDevice(device.toSavedDevice())
+    }
+
+    override suspend fun loadLastDevice(): SavedDevice? {
+        return appPrefs.loadLastDevice()
+    }
+
+    override suspend fun clearLastDevice() {
+        appPrefs.clearLastDevice()
+    }
+
+    // ----------------------------------------------------------------
+    // Wake-on-LAN
+    // ----------------------------------------------------------------
+
+    override suspend fun wakeDevice(macAddress: String, broadcastIp: String): Boolean {
+        return WakeOnLanSender.send(macAddress, broadcastIp)
+    }
+
+    // ----------------------------------------------------------------
+    // App List Sync
+    // ----------------------------------------------------------------
+
+    override suspend fun fetchInstalledApps() {
+        val device = connectionManager.currentDevice.value ?: return
+        val apps = appListFetcher.fetchApps(device.ipAddress, device.port, device.brand)
+        _installedApps.value = apps
     }
 }
 

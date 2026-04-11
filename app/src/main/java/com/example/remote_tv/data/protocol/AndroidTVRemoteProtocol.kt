@@ -7,6 +7,8 @@ import java.io.DataOutputStream
 import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import javax.net.ssl.SSLSocket
+import com.example.remote_tv.data.debug.InAppDiagnostics
 
 /**
  * Android TV Remote Control Protocol (port 6466 / _androidtvremote2._tcp)
@@ -49,22 +51,43 @@ class AndroidTVRemoteProtocol : TVProtocol {
             "KEY_VOICE" to 231,
             "KEY_POWER" to 26,
             "KEY_MENU" to 82,
+            "KEY_SETTINGS" to 176,
+            "KEY_CH_UP" to 166,
+            "KEY_CH_DOWN" to 167,
+            "KEY_CHANNEL_UP" to 166,
+            "KEY_CHANNEL_DOWN" to 167,
             "KEY_PLAY_PAUSE" to 85,
         )
     }
 
     override suspend fun connect(ip: String, port: Int): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d(TAG, "Connecting to Android TV Remote at $ip:$port")
-            val s = Socket()
+            InAppDiagnostics.info(TAG, "Connecting to Android TV Remote at $ip:$port")
+            
+            val s = if (port == 6466) {
+                // Sử dụng TLS cho port 6466 (v2 Remote Service)
+                InAppDiagnostics.info(TAG, "Using TLS for secure connection...")
+                val sslContext = AndroidTVCertificateManager.getSslContext()
+                val factory = sslContext.socketFactory
+                factory.createSocket() as SSLSocket
+            } else {
+                Socket()
+            }
+
             s.connect(InetSocketAddress(ip, port), 3000)
+            
+            if (s is SSLSocket) {
+                s.startHandshake()
+                InAppDiagnostics.info(TAG, "TLS Handshake successful!")
+            }
+
             socket = s
             outputStream = DataOutputStream(s.getOutputStream())
             inputStream = s.getInputStream()
             Log.d(TAG, "Connected to Android TV Remote!")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to connect: ${e.message}")
+            InAppDiagnostics.error(TAG, "Failed to connect: ${e.message}")
             false
         }
     }
@@ -123,33 +146,30 @@ class AndroidTVRemoteProtocol : TVProtocol {
     }
 
     override suspend fun launchApp(appId: String): Boolean = withContext(Dispatchers.IO) {
-        // Đã được Hoàng Văn Huy fix: Sử dụng ADB (Port 5555) để ép TV mở App
+        val ip = socket?.inetAddress?.hostAddress ?: return@withContext false
+        val target = appId.trim()
+        if (target.isBlank()) return@withContext false
+
+        val adb = AdbProtocol()
         return@withContext try {
-            Log.d(TAG, "Attempting to launch app via ADB: $appId")
-
-            // Lấy IP từ socket hiện tại đang kết nối (nếu có)
-            val ip = socket?.inetAddress?.hostAddress ?: return@withContext false
-
-            // Tạo 1 kết nối ADB song song vào cổng 5555
-            val adbSocket = Socket()
-            adbSocket.connect(InetSocketAddress(ip, 5555), 2000)
-            val out = adbSocket.getOutputStream()
-
-            val command = if (appId.startsWith("am start")) {
-                "$appId\n"
-            } else {
-                "monkey -p $appId -c android.intent.category.LAUNCHER 1\n"
+            val connected = adb.connect(ip, 5555)
+            if (!connected) {
+                InAppDiagnostics.warn(TAG, "launchApp ADB connect failed: $ip:5555")
+                return@withContext false
             }
 
-            out.write(command.toByteArray())
-            out.flush()
-            adbSocket.close()
-
-            Log.d(TAG, "Launch command sent successfully!")
-            true
+            val success = adb.launchApp(target)
+            if (success) {
+                InAppDiagnostics.info(TAG, "launchApp via ADB success: $target")
+            } else {
+                InAppDiagnostics.warn(TAG, "launchApp via ADB failed: $target")
+            }
+            success
         } catch (e: Exception) {
             Log.e(TAG, "launchApp ADB error: ${e.message}")
             false
+        } finally {
+            runCatching { adb.disconnect() }
         }
     }
 }

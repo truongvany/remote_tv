@@ -60,6 +60,16 @@ dependencies {
     // Explicitly add kotlinx-serialization-json for buildJsonObject
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // Image Loading
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Google Cast SDK
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
+
+    // Local HTTP media server for casting local image/video files
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

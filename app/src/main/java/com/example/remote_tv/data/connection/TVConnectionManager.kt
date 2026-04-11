@@ -166,41 +166,12 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private suspend fun connectAndroidTV(device: TVDevice): TVProtocol? {
-        // TODO (Real TV): AndroidTVRemoteProtocol hoàn chỉnh cần TLS + certificate pairing.
-        // Bản hiện tại chỉ thử handshake TCP ở các cổng Android TV phổ biến.
-        val candidatePorts = buildList {
-            if (device.port == 6466 || device.port == 6467) {
-                add(device.port)
-            }
-            add(6466)
-            add(6467)
-        }.distinct()
-
-        repeat(ConnectionPolicy.MAX_CONNECT_ROUNDS) { roundIndex ->
-            val round = roundIndex + 1
-            candidatePorts.forEach { port ->
-                val remote = AndroidTVRemoteProtocol()
-                val connected = attemptConnect(
-                    protocolName = "AndroidTV",
-                    ipAddress = device.ipAddress,
-                    port = port,
-                    round = round,
-                    connectAction = { remote.connect(device.ipAddress, port) }
-                )
-
-                if (connected) {
-                    Log.d(TAG, "Connected via AndroidTVRemoteProtocol at port $port")
-                    return remote
-                }
-            }
-
-            if (round < ConnectionPolicy.MAX_CONNECT_ROUNDS) {
-                delay(ConnectionPolicy.backoffMs(round))
-            }
-        }
-
-        Log.w(TAG, "AndroidTVRemote connection failed for ${device.ipAddress}")
-        InAppDiagnostics.warn(TAG, "AndroidTV remote connect failed for ${device.ipAddress}. Trying ADB fallback...")
+        // remote2 TLS pairing (6466/6467) is not complete in this project yet.
+        // To avoid false-positive "CONNECTED" state, use ADB as the only control-ready path for Android TV.
+        InAppDiagnostics.warn(
+            TAG,
+            "AndroidTV remote2 pairing is not fully implemented. Using ADB control path at ${device.ipAddress}:5555"
+        )
         return connectViaAdb(device)
     }
 
@@ -238,11 +209,19 @@ class TVConnectionManager(private val client: HttpClient) {
     private fun buildConnectionError(device: TVDevice): String {
         return when (device.brand) {
             TVBrand.ANDROID_TV -> {
+                if (device.ipAddress.startsWith("fe80", ignoreCase = true)) {
+                    "TV đang trả địa chỉ IPv6 link-local (${device.ipAddress}) nên kết nối có thể thất bại nếu thiếu scope mạng. " +
+                        "Hãy refresh để chọn thiết bị có IPv4 (thường dạng 10.x/192.168.x), hoặc đảm bảo điện thoại và TV cùng Wi-Fi rồi thử lại."
+                } else
                 if (device.port == 8008 || device.port == 8009) {
                     "TV này được phát hiện qua Google Cast (port ${device.port}). " +
+                        "Google Cast chỉ dùng để phát hiện thiết bị, không phải kênh điều khiển remote. " +
                         "Hãy bật ADB Debugging trên TV: Settings → Hệ thống → Thông tin → bấm Build Number 7 lần → Developer Options → USB Debugging: ON → Network Debugging: ON."
+                } else if (device.port == 6466 || device.port == 6467) {
+                    "Đã phát hiện Android TV Remote service (port ${device.port}) nhưng luồng TLS pairing remote2 chưa hoàn chỉnh trong phiên bản này. " +
+                        "Vui lòng bật ADB Debugging + Network Debugging để app điều khiển qua cổng 5555."
                 } else {
-                    "Không kết nối được Android TV tại ${device.ipAddress}. Đảm bảo TV và điện thoại cùng WiFi."
+                    "Không kết nối được Android TV tại ${device.ipAddress}. Đảm bảo TV và điện thoại cùng WiFi, sau đó bật USB Debugging + Network Debugging trên TV để điều khiển qua ADB (5555)."
                 }
             }
             TVBrand.SAMSUNG -> {
@@ -456,12 +435,38 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private fun appSearchQuery(appId: String): String? {
-        return when (appId) {
+        val normalizedAppId = appId.trim()
+        return when (normalizedAppId) {
             "com.netflix.ninja" -> "Netflix"
-            "com.google.android.youtube.tv" -> "YouTube"
+            "com.google.android.youtube.tv", "com.google.android.youtube.tvunplugged" -> "YouTube"
             "com.disney.disneyplus" -> "Disney Plus"
-            else -> null
+            "com.amazon.amazonvideo.livingroom" -> "Prime Video"
+            "com.spotify.tv.android" -> "Spotify"
+            "com.android.vending" -> "Play Store"
+            "com.android.tv.settings", "am start -a android.settings.SETTINGS" -> "Settings"
+            else -> normalizedAppId.toSearchFallbackQuery()
         }
+    }
+
+    private fun String.toSearchFallbackQuery(): String? {
+        val normalized = trim()
+        if (normalized.isBlank()) return null
+
+        if (normalized.startsWith("am start -a android.settings.SETTINGS", ignoreCase = true)) {
+            return "Settings"
+        }
+
+        if (!normalized.contains('.')) {
+            return normalized.takeIf { it.length >= 2 }
+        }
+
+        val candidate = normalized
+            .substringAfterLast('.')
+            .replace('_', ' ')
+            .replace('-', ' ')
+            .replaceFirstChar { ch -> ch.uppercase() }
+
+        return candidate.takeIf { it.length >= 2 }
     }
 
     private fun resolveCommandCandidates(command: String, protocol: TVProtocol): List<String> {
@@ -469,6 +474,16 @@ class TVConnectionManager(private val client: HttpClient) {
             return when (command) {
                 "KEY_VOICE" -> listOf("KEY_BT_VOICE", "KEY_VOICE", "KEY_MIC")
                 "KEY_SEARCH" -> listOf("KEY_SEARCH", "KEY_FINDER")
+                "KEY_CH_UP" -> listOf("KEY_CH_UP", "KEY_CHUP")
+                "KEY_CH_DOWN" -> listOf("KEY_CH_DOWN", "KEY_CHDOWN")
+                else -> listOf(command)
+            }
+        }
+
+        if (protocol is LGProtocol) {
+            return when (command) {
+                "KEY_CH_UP" -> listOf("KEY_CH_UP", "KEY_CHANNEL_UP")
+                "KEY_CH_DOWN" -> listOf("KEY_CH_DOWN", "KEY_CHANNEL_DOWN")
                 else -> listOf(command)
             }
         }
@@ -477,6 +492,10 @@ class TVConnectionManager(private val client: HttpClient) {
             return when (command) {
                 "KEY_VOICE" -> listOf("KEY_VOICE", "VOICE")
                 "KEY_SEARCH" -> listOf("KEY_SEARCH", "SEARCH")
+                // Google TV often handles options/settings better than legacy KEY_MENU.
+                "KEY_MENU" -> listOf("KEY_SETTINGS", "KEY_MENU")
+                "KEY_CH_UP" -> listOf("KEY_CH_UP", "KEY_CHANNEL_UP")
+                "KEY_CH_DOWN" -> listOf("KEY_CH_DOWN", "KEY_CHANNEL_DOWN")
                 else -> listOf(command)
             }
         }
@@ -488,15 +507,21 @@ class TVConnectionManager(private val client: HttpClient) {
         return when (device.brand) {
             TVBrand.SAMSUNG -> when (appId) {
                 "com.netflix.ninja" -> "11101200001"
-                "com.google.android.youtube.tv" -> "111299001912"
+                "com.google.android.youtube.tv", "com.google.android.youtube.tvunplugged" -> "111299001912"
                 "com.disney.disneyplus" -> "3201901017640"
+                "com.amazon.amazonvideo.livingroom" -> "3201512006785"
+                "com.spotify.tv.android" -> "3201606009684"
+                "com.android.tv.settings" -> "org.tizen.settings"
                 else -> appId
             }
 
             TVBrand.LG -> when (appId) {
                 "com.netflix.ninja" -> "netflix"
-                "com.google.android.youtube.tv" -> "youtube.leanback.v4"
+                "com.google.android.youtube.tv", "com.google.android.youtube.tvunplugged" -> "youtube.leanback.v4"
                 "com.disney.disneyplus" -> "com.disney.disneyplus-prod"
+                "com.amazon.amazonvideo.livingroom" -> "amazon"
+                "com.spotify.tv.android" -> "spotify-beehive"
+                "com.android.tv.settings" -> "com.webos.app.settings"
                 else -> appId
             }
 

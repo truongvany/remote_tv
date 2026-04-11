@@ -19,6 +19,11 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.REMOTE_TV">
+
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.example.remote_tv.data.casting.CastOptionsProvider" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

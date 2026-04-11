@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -55,10 +56,13 @@ fun VoiceListeningOverlay(
         label = "voice-glow"
     )
 
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.74f))
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.9f))
             .clickable { onStop() },
         contentAlignment = Alignment.Center
     ) {
@@ -78,10 +82,9 @@ fun VoiceListeningOverlay(
                 val y = center.y + sin(angle) * radius * 0.72f
                 val particleSize = 1.8f + ((index % 5) * 1.1f)
                 val alpha = 0.23f + ((index % 6) * 0.09f) * glow.value
-                val hueShift = if (index % 3 == 0) 0xFFFFB07C else 0xFFFF7B45
-
+                
                 drawCircle(
-                    color = Color(hueShift).copy(alpha = alpha.coerceAtMost(0.9f)),
+                    color = primaryColor.copy(alpha = alpha.coerceAtMost(0.9f)),
                     radius = particleSize,
                     center = Offset(x, y)
                 )
@@ -97,7 +100,7 @@ fun VoiceListeningOverlay(
                     .size((112 + rmsLevel.coerceIn(0f, 10f) * 1.8f).dp)
                     .background(
                         brush = Brush.radialGradient(
-                            colors = listOf(Color(0xFFFF8C63), Color(0xFFFF5B21))
+                            colors = listOf(primaryColor, primaryColor.copy(alpha = 0.7f))
                         ),
                         shape = CircleShape
                     ),
@@ -106,7 +109,7 @@ fun VoiceListeningOverlay(
                 Icon(
                     imageVector = Icons.Filled.Mic,
                     contentDescription = "Listening",
-                    tint = Color.Black,
+                    tint = onPrimaryColor,
                     modifier = Modifier.size(44.dp)
                 )
             }
@@ -115,7 +118,7 @@ fun VoiceListeningOverlay(
 
             Text(
                 text = statusText,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 0.8.sp
@@ -125,7 +128,7 @@ fun VoiceListeningOverlay(
 
             Text(
                 text = if (transcript.isBlank()) "Say something..." else transcript,
-                color = Color(0xFFFFC8AF),
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 2
@@ -136,14 +139,14 @@ fun VoiceListeningOverlay(
             Box(
                 modifier = Modifier
                     .size(56.dp)
-                    .background(Color(0xFF2A2A2A), CircleShape)
+                    .background(MaterialTheme.colorScheme.secondary, CircleShape)
                     .clickable { onStop() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.Stop,
                     contentDescription = "Stop listening",
-                    tint = Color(0xFFFF8A65),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
             }

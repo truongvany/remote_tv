@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -139,9 +138,7 @@ fun MainRemoteTab(viewModel: TVViewModel) {
                 if (spokenText.isNotEmpty()) {
                     voiceTranscript = spokenText
                     voiceStatusText = "Sending to TV..."
-                    viewModel.sendCommand("KEY_SEARCH")
-                    viewModel.sendCommand("TEXT:$spokenText")
-                    viewModel.sendCommand("KEY_ENTER")
+                    viewModel.sendVoiceQuery(spokenText)
                 } else {
                     voiceStatusText = "No speech detected"
                 }
@@ -178,12 +175,6 @@ fun MainRemoteTab(viewModel: TVViewModel) {
 
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(uiState.actionMessage) {
-        val message = uiState.actionMessage ?: return@LaunchedEffect
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        viewModel.consumeActionMessage()
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -194,7 +185,13 @@ fun MainRemoteTab(viewModel: TVViewModel) {
         ) {
             TopBar(
                 deviceName = deviceName,
-                onPower = { viewModel.powerToggle() },
+                onPower = {
+                    if (currentDevice != null) {
+                        viewModel.sendCommand("KEY_POWER")
+                    } else {
+                        viewModel.wakeLastDevice()
+                    }
+                },
                 onCastClick = { viewModel.selectTab(2) }
             )
 
@@ -224,7 +221,7 @@ fun MainRemoteTab(viewModel: TVViewModel) {
                 )
 
                 2 -> KeyboardInput(
-                    onSendText = { text -> viewModel.sendCommand("TEXT:$text") }
+                    onSendText = { text -> viewModel.sendText(text) }
                 )
             }
 
@@ -256,7 +253,9 @@ fun MainRemoteTab(viewModel: TVViewModel) {
 
             Spacer(modifier = Modifier.height(28.dp))
 
+            val installedApps by viewModel.installedApps.collectAsState()
             QuickLaunch(
+                apps = installedApps,
                 isEnabled = currentDevice != null,
                 onLaunchApp = { viewModel.launchApp(it) }
             )

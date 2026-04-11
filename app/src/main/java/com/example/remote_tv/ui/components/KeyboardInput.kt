@@ -1,5 +1,6 @@
 package com.example.remote_tv.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,11 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.example.remote_tv.ui.theme.ButtonBackground
-import com.example.remote_tv.ui.theme.OrangeAccent
 import java.text.Normalizer
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KeyboardInput(onSendText: (String) -> Unit = {}) {
     var text by remember { mutableStateOf("") }
@@ -31,7 +29,7 @@ fun KeyboardInput(onSendText: (String) -> Unit = {}) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(ButtonBackground, RoundedCornerShape(28.dp))
+            .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(28.dp))
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -40,18 +38,19 @@ fun KeyboardInput(onSendText: (String) -> Unit = {}) {
             onValueChange = { updated ->
                 text = if (updated.length <= maxChars) updated else updated.take(maxChars)
             },
-            label = { Text("Nhập nội dung tìm kiếm / gõ phím...", color = Color.Gray) },
+            label = { Text("Nhập nội dung tìm kiếm / gõ phím...", color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.5f)) },
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = OrangeAccent,
-                unfocusedBorderColor = Color.DarkGray,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                focusedTextColor = MaterialTheme.colorScheme.onSecondary,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSecondary,
+                cursorColor = MaterialTheme.colorScheme.primary
             ),
             modifier = Modifier.fillMaxWidth(),
             supportingText = {
                 Text(
                     text = "${text.length}/$maxChars | Hỗ trợ tiếng Việt, dấu cách và câu dài",
-                    color = Color(0xFF8E8E8E)
+                    color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.4f)
                 )
             },
             minLines = 3,
@@ -69,7 +68,10 @@ fun KeyboardInput(onSendText: (String) -> Unit = {}) {
                 onClick = { text = "" },
                 modifier = Modifier.weight(1f),
                 enabled = text.isNotEmpty(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFCFCFCF))
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.7f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
             ) {
                 Icon(Icons.Filled.Clear, contentDescription = "Clear", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -83,14 +85,13 @@ fun KeyboardInput(onSendText: (String) -> Unit = {}) {
                     }
                 },
                 enabled = canSend,
-                colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.weight(1.4f)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Gửi lên TV", color = Color.White)
+                Text("Gửi lên TV", color = MaterialTheme.colorScheme.onPrimary)
             }
         }
     }
 }
-

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,22 +20,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_tv.ui.theme.OrangeAccent
-import com.example.remote_tv.ui.theme.TextSecondary
 
 @Composable
 fun NowPlayingCard() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(30.dp))
+            .clip(RoundedCornerShape(28.dp))
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFF151515), Color(0xFF121212))
+                    colors = listOf(
+                        MaterialTheme.colorScheme.tertiary,
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f)
+                    )
                 )
             )
-            .border(1.dp, Color(0xFF262626), RoundedCornerShape(30.dp))
-            .padding(24.dp)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(28.dp))
+            .padding(20.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -44,42 +46,42 @@ fun NowPlayingCard() {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "NOW PLAYING",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.6f),
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
+                    letterSpacing = 1.sp
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "The Mandalorian",
-                    color = Color.White,
-                    fontSize = 22.sp,
+                    color = MaterialTheme.colorScheme.onTertiary,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Black
                 )
                 Text(
                     text = "S2 : E5 • Chapter 13: The Jedi",
-                    color = OrangeAccent,
-                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF1F1F1F))
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.1f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = "4K",
-                    color = OrangeAccent,
-                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Black
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -88,16 +90,16 @@ fun NowPlayingCard() {
             Icon(
                 Icons.AutoMirrored.Filled.VolumeDown,
                 contentDescription = null,
-                tint = Color(0xFFADAAAA),
-                modifier = Modifier.size(16.dp)
+                tint = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.4f),
+                modifier = Modifier.size(14.dp)
             )
 
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(10.dp)
+                    .height(8.dp)
                     .clip(CircleShape)
-                    .background(Color.Black)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
             ) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     Box(
@@ -106,7 +108,10 @@ fun NowPlayingCard() {
                             .fillMaxHeight()
                             .background(
                                 Brush.horizontalGradient(
-                                    colors = listOf(OrangeAccent, Color(0xFFFF5D1F))
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                    )
                                 )
                             )
                     )
@@ -114,13 +119,13 @@ fun NowPlayingCard() {
                         modifier = Modifier
                             .weight(0.09f)
                             .fillMaxHeight()
-                            .background(Color(0xFFE4E2E1))
+                            .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f))
                     )
                     Box(
                         modifier = Modifier
                             .weight(0.23f)
                             .fillMaxHeight()
-                            .background(Color.Black)
+                            .background(Color.Transparent)
                     )
                 }
             }
@@ -128,8 +133,8 @@ fun NowPlayingCard() {
             Icon(
                 Icons.AutoMirrored.Filled.VolumeUp,
                 contentDescription = null,
-                tint = Color(0xFFADAAAA),
-                modifier = Modifier.size(16.dp)
+                tint = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.4f),
+                modifier = Modifier.size(14.dp)
             )
         }
     }
