@@ -89,6 +89,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _lastDeviceName = MutableStateFlow<String?>(null)
     val lastDeviceName: StateFlow<String?> = _lastDeviceName.asStateFlow()
+    private var hasAttemptedAutoReconnect = false
 
     private val commandMutex = Mutex()
 
@@ -107,7 +108,6 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         observeSettings()
         observePlaybackVisibility()
         observeMacros()
-        autoReconnectLastDevice()
     }
 
     private fun observeSettings() {
@@ -124,6 +124,11 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
                         userProfile = userProfile,
                         isProfileSaving = false
                     )
+                }
+
+                if (appSettings.autoReconnectLastDevice && !hasAttemptedAutoReconnect) {
+                    hasAttemptedAutoReconnect = true
+                    autoReconnectLastDevice()
                 }
             }
         }
@@ -146,7 +151,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onCastTabOpened() {
         refreshNetworkDebugInfo()
-        if (_uiState.value.hasLocationPermission) {
+        if (_uiState.value.hasLocationPermission && settingsUiState.value.appSettings.autoScanOnCastTab) {
             repository.startDiscovery()
         }
     }
@@ -166,7 +171,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
                 localSubnet = resolveLocalSubnet(),
             )
         }
-        if (granted && _uiState.value.selectedTab == 2) {
+        if (granted && _uiState.value.selectedTab == 2 && settingsUiState.value.appSettings.autoScanOnCastTab) {
             repository.startDiscovery()
         }
     }
@@ -663,6 +668,36 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     fun setLanguage(languageCode: String) {
         viewModelScope.launch {
             appPreferencesRepository.setLanguageCode(languageCode)
+        }
+    }
+
+    fun setAutoReconnectLastDevice(enabled: Boolean) {
+        viewModelScope.launch {
+            appPreferencesRepository.setAutoReconnectLastDevice(enabled)
+            if (enabled && !hasAttemptedAutoReconnect) {
+                hasAttemptedAutoReconnect = true
+                autoReconnectLastDevice()
+            }
+        }
+    }
+
+    fun setAutoScanOnCastTab(enabled: Boolean) {
+        viewModelScope.launch {
+            appPreferencesRepository.setAutoScanOnCastTab(enabled)
+        }
+    }
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        viewModelScope.launch {
+            appPreferencesRepository.setKeepScreenOn(enabled)
+        }
+    }
+
+    fun forgetLastConnectedDevice() {
+        viewModelScope.launch {
+            repository.clearLastDevice()
+            _lastDeviceName.value = null
+            _uiState.update { it.copy(actionMessage = "Last connected TV removed") }
         }
     }
 

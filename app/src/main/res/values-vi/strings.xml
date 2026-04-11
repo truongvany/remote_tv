@@ -4,7 +4,15 @@
     <string name="settings_subtitle">Quan ly giao dien, ngon ngu va ho so cua ban</string>
     <string name="section_account">TAI KHOAN</string>
     <string name="section_preferences">TUY CHON</string>
+    <string name="section_connection">KET NOI</string>
+    <string name="section_maintenance">BAO TRI</string>
     <string name="section_about">THONG TIN</string>
+
+    <string name="settings_account_subtitle">Thong tin ho so va danh tinh</string>
+    <string name="settings_preferences_subtitle">Giao dien va ngon ngu ung dung</string>
+    <string name="settings_connection_subtitle">Cach ung dung xu ly ket noi voi TV</string>
+    <string name="settings_maintenance_subtitle">Cac thao tac don dep thiet bi va log</string>
+    <string name="settings_about_subtitle">Thong tin co ban cua ban build hien tai</string>
 
     <string name="profile_edit">Sua ho so</string>
     <string name="profile_name">Ten hien thi</string>
@@ -17,14 +25,29 @@
     <string name="theme_dark">Toi</string>
     <string name="theme_light">Sang</string>
 
+    <string name="setting_auto_reconnect_title">Tu dong ket noi lai TV cuoi</string>
+    <string name="setting_auto_reconnect_subtitle">Tu ket noi lai sau khi mo ung dung</string>
+    <string name="setting_auto_scan_cast_title">Tu dong quet khi mo tab Cast</string>
+    <string name="setting_auto_scan_cast_subtitle">Bat dau tim thiet bi ma khong can bam lam moi</string>
+    <string name="setting_keep_screen_on_title">Giu man hinh luon sang</string>
+    <string name="setting_keep_screen_on_subtitle">Khong de dien thoai tat man hinh khi dang dieu khien</string>
+
     <string name="language_title">Ngon ngu</string>
     <string name="language_english">English</string>
     <string name="language_vietnamese">Tieng Viet</string>
 
     <string name="save_action">Luu</string>
     <string name="cancel_action">Huy</string>
+    <string name="settings_action_run">Chay</string>
+    <string name="settings_action_clear">Xoa</string>
 
     <string name="account_type">Loai tai khoan</string>
     <string name="account_type_local">Ho so local</string>
     <string name="app_version">Phien ban ung dung</string>
+    <string name="app_version_value">1.0</string>
+
+    <string name="action_forget_last_device">Quen TV da ket noi cuoi</string>
+    <string name="action_forget_last_device_subtitle">Xoa TV da luu cho tinh nang tu ket noi</string>
+    <string name="action_clear_diagnostics">Xoa nhat ky chan doan</string>
+    <string name="action_clear_diagnostics_subtitle">Xoa lich su log xu ly su co trong app</string>
 </resources>

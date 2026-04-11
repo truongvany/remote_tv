@@ -212,6 +212,11 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                         )
                     },
                     onLanguageChanged = viewModel::setLanguage,
+                    onAutoReconnectChanged = viewModel::setAutoReconnectLastDevice,
+                    onAutoScanCastChanged = viewModel::setAutoScanOnCastTab,
+                    onKeepScreenOnChanged = viewModel::setKeepScreenOn,
+                    onForgetLastDevice = viewModel::forgetLastConnectedDevice,
+                    onClearDiagnostics = viewModel::clearDiagnosticLogs,
                     onProfileSave = viewModel::updateUserProfile,
                     onDismissProfileError = viewModel::clearProfileError
                 )

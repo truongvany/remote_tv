@@ -1,6 +1,7 @@
 package com.example.remote_tv.data.preferences
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -22,7 +23,10 @@ class AppPreferencesRepository(private val context: Context) {
     val appSettingsFlow: Flow<AppSettings> = context.appPreferencesDataStore.data.map { prefs ->
         AppSettings(
             themeMode = prefs[PreferencesKeys.themeMode]?.toAppThemeMode() ?: AppThemeMode.DARK,
-            languageCode = prefs[PreferencesKeys.languageCode] ?: "en"
+            languageCode = prefs[PreferencesKeys.languageCode] ?: "en",
+            autoReconnectLastDevice = prefs[PreferencesKeys.autoReconnectLastDevice] ?: true,
+            autoScanOnCastTab = prefs[PreferencesKeys.autoScanOnCastTab] ?: true,
+            keepScreenOn = prefs[PreferencesKeys.keepScreenOn] ?: false,
         )
     }
 
@@ -44,6 +48,24 @@ class AppPreferencesRepository(private val context: Context) {
     suspend fun setLanguageCode(languageCode: String) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[PreferencesKeys.languageCode] = languageCode
+        }
+    }
+
+    suspend fun setAutoReconnectLastDevice(enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[PreferencesKeys.autoReconnectLastDevice] = enabled
+        }
+    }
+
+    suspend fun setAutoScanOnCastTab(enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[PreferencesKeys.autoScanOnCastTab] = enabled
+        }
+    }
+
+    suspend fun setKeepScreenOn(enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[PreferencesKeys.keepScreenOn] = enabled
         }
     }
 
@@ -124,6 +146,9 @@ class AppPreferencesRepository(private val context: Context) {
     private object PreferencesKeys {
         val themeMode: Preferences.Key<String> = stringPreferencesKey("theme_mode")
         val languageCode: Preferences.Key<String> = stringPreferencesKey("language_code")
+        val autoReconnectLastDevice: Preferences.Key<Boolean> = booleanPreferencesKey("auto_reconnect_last_device")
+        val autoScanOnCastTab: Preferences.Key<Boolean> = booleanPreferencesKey("auto_scan_on_cast_tab")
+        val keepScreenOn: Preferences.Key<Boolean> = booleanPreferencesKey("keep_screen_on")
 
         val userId: Preferences.Key<String> = stringPreferencesKey("user_id")
         val displayName: Preferences.Key<String> = stringPreferencesKey("display_name")

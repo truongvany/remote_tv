@@ -4,7 +4,15 @@
     <string name="settings_subtitle">Manage appearance, language, and your profile</string>
     <string name="section_account">ACCOUNT</string>
     <string name="section_preferences">PREFERENCES</string>
+    <string name="section_connection">CONNECTION</string>
+    <string name="section_maintenance">MAINTENANCE</string>
     <string name="section_about">ABOUT</string>
+
+    <string name="settings_account_subtitle">Your profile and identity details</string>
+    <string name="settings_preferences_subtitle">Visual style and app language</string>
+    <string name="settings_connection_subtitle">How the app behaves with your TV connection</string>
+    <string name="settings_maintenance_subtitle">Cleanup actions for devices and diagnostics</string>
+    <string name="settings_about_subtitle">Basic information about this app build</string>
 
     <string name="profile_edit">Edit profile</string>
     <string name="profile_name">Display name</string>
@@ -17,14 +25,29 @@
     <string name="theme_dark">Dark</string>
     <string name="theme_light">Light</string>
 
+    <string name="setting_auto_reconnect_title">Auto reconnect to last TV</string>
+    <string name="setting_auto_reconnect_subtitle">Reconnect automatically after app launch</string>
+    <string name="setting_auto_scan_cast_title">Auto scan when opening Cast tab</string>
+    <string name="setting_auto_scan_cast_subtitle">Start device discovery without tapping refresh</string>
+    <string name="setting_keep_screen_on_title">Keep screen awake</string>
+    <string name="setting_keep_screen_on_subtitle">Prevent the phone from sleeping while using remote</string>
+
     <string name="language_title">Language</string>
     <string name="language_english">English</string>
     <string name="language_vietnamese">Tiếng Việt</string>
 
     <string name="save_action">Save</string>
     <string name="cancel_action">Cancel</string>
+    <string name="settings_action_run">Run</string>
+    <string name="settings_action_clear">Clear</string>
 
     <string name="account_type">Account type</string>
     <string name="account_type_local">Local profile</string>
     <string name="app_version">App version</string>
+    <string name="app_version_value">1.0</string>
+
+    <string name="action_forget_last_device">Forget last connected TV</string>
+    <string name="action_forget_last_device_subtitle">Remove saved TV used for auto reconnect</string>
+    <string name="action_clear_diagnostics">Clear diagnostics logs</string>
+    <string name="action_clear_diagnostics_subtitle">Delete in-app troubleshooting history</string>
 </resources>
