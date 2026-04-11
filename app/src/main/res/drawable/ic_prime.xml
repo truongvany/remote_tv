@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Dark blue background -->
+    <path
+        android:fillColor="#00A8E1"
+        android:pathData="M10,4h28C41.314,4,44,6.686,44,10v28C44,41.314,41.314,44,38,44H10C6.686,44,4,41.314,4,38V10C4,6.686,6.686,4,10,4z"/>
+    <!-- Prime video play arrow -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18,14l16,10L18,34z"/>
+    <!-- Underline bar -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,36h24v2H12z"/>
+</vector>

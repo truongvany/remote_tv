@@ -4,49 +4,71 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Drop Shadow for 3D Pop -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFF5B15E"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:pathData="M39,24q15,-14 30,0" />
+        android:fillColor="#33000000"
+        android:pathData="
+            M 44,26
+            L 68,26
+            A 8,8 0 0 1 76,34
+            L 76,78
+            A 8,8 0 0 1 68,86
+            L 44,86
+            A 8,8 0 0 1 36,78
+            L 36,34
+            A 8,8 0 0 1 44,26 Z
+        " />
+
+    <!-- Unified Remote Body (Solid White, with perfect button cutouts showing the background) -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFF8A00"
-        android:strokeWidth="2.2"
-        android:strokeLineCap="round"
-        android:pathData="M32,28q22,-22 44,0" />
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M 42,24
+            L 66,24
+            A 8,8 0 0 1 74,32
+            L 74,76
+            A 8,8 0 0 1 66,84
+            L 42,84
+            A 8,8 0 0 1 34,76
+            L 34,32
+            A 8,8 0 0 1 42,24 Z
+            
+            M 54,30
+            A 4.5,4.5 0 0 0 54,39
+            A 4.5,4.5 0 0 0 54,30 Z
+            
+            M 54,46
+            A 14,14 0 0 0 54,74
+            A 14,14 0 0 0 54,46 Z
+            
+            M 44,72
+            A 3.5,3.5 0 0 0 44,79
+            A 3.5,3.5 0 0 0 44,72 Z
+            
+            M 64,72
+            A 3.5,3.5 0 0 0 64,79
+            A 3.5,3.5 0 0 0 64,72 Z
+        " />
+
+    <!-- D-pad Inner Button (Solid White) -->
     <path
-        android:fillColor="#FF171D27"
-        android:strokeColor="#FFFF8A00"
-        android:strokeWidth="2"
-        android:pathData="M43,30h22q5,0 5,5v43q0,5 -5,5H43q-5,0 -5,-5V35q0,-5 5,-5z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M 54,54
+            A 6,6 0 0 1 54,66
+            A 6,6 0 0 1 54,54 Z
+        " />
+
+    <!-- Subtle inner highlight for gloss effect -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFB74D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:pathData="M54,36v4" />
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFB74D"
-        android:strokeWidth="1.8"
-        android:pathData="M54,40m-4.6,0a4.6,4.6 0 1,1 9.2,0a4.6,4.6 0 1,1 -9.2,0" />
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFF8A00"
-        android:strokeWidth="1.8"
-        android:pathData="M54,54m-8,0a8,8 0 1,1 16,0a8,8 0 1,1 -16,0" />
-    <path
-        android:fillColor="#FFFF8A00"
-        android:pathData="M54,54m-2.7,0a2.7,2.7 0 1,1 5.4,0a2.7,2.7 0 1,1 -5.4,0" />
-    <path
-        android:fillColor="#FFFFB74D"
-        android:pathData="M47,66h14v2.4H47z" />
-    <path
-        android:fillColor="#FFFFB74D"
-        android:pathData="M47,72h14v2.4H47z" />
-    <path
-        android:fillColor="#FFFFB74D"
-        android:pathData="M47,78h14v2.4H47z" />
+        android:fillColor="#80FFFFFF"
+        android:pathData="
+            M 42,24 
+            L 66,24 
+            A 8,8 0 0 1 70,25.5 
+            L 40.5,25.5 
+            A 8,8 0 0 1 42,24 Z
+        " />
+
 </vector>
