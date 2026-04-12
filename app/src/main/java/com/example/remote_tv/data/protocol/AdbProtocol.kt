@@ -285,6 +285,15 @@ class AdbProtocol : TVProtocol {
     }
 
     private suspend fun sendTextByInputCommand(text: String): Boolean {
+        val base64Text = android.util.Base64.encodeToString(text.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+        
+        // Try passing the exact UTF-8 string through base64 to input text
+        val base64InputCmd = "input text \"$(echo $base64Text | base64 -d)\"\n"
+        if (sendShellCommand(base64InputCmd)) {
+            return true
+        }
+
+        // Fallback to chunks
         val encoded = encodeForAndroidInputText(text)
         val chunks = encoded.chunked(36)
 
@@ -305,6 +314,14 @@ class AdbProtocol : TVProtocol {
     }
 
     private suspend fun sendTextViaCmdInput(text: String): Boolean {
+        val base64Text = android.util.Base64.encodeToString(text.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+        
+        val base64InputCmd = "cmd input text \"$(echo $base64Text | base64 -d)\"\n"
+        if (sendShellCommand(base64InputCmd)) {
+            return true
+        }
+
+        // Fallback to chunks
         val encoded = encodeForAndroidInputText(text)
         val chunks = encoded.chunked(32)
         chunks.forEachIndexed { index, chunk ->
@@ -325,11 +342,17 @@ class AdbProtocol : TVProtocol {
 
     private fun sendTextViaClipboard(text: String): Boolean {
         val escaped = escapeForShellDoubleQuoted(text)
+        val base64Text = android.util.Base64.encodeToString(text.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
 
         val setClipboardCommands = listOf(
+            // Try ADBKeyBoard broadcast first (most reliable for Unicode on TV if installed)
+            "am broadcast -a ADB_INPUT_B64 --es msg \"$base64Text\"\n",
+            // Try to set clipboard using base64 decoding to avoid shell character mangling
+            "cmd clipboard set \"$(echo $base64Text | base64 -d)\"\n",
+            "cmd clipboard set text \"$(echo $base64Text | base64 -d)\"\n",
+            // Fallbacks:
             "cmd clipboard set text \"$escaped\"\n",
             "cmd clipboard set \"$escaped\"\n",
-            // Older Android builds may only expose clipboard service call variants.
             "service call clipboard 2 i32 0 s16 \"com.android.shell\" s16 \"$escaped\"\n",
             "service call clipboard 1 i32 0 s16 \"com.android.shell\" s16 \"$escaped\"\n",
         )

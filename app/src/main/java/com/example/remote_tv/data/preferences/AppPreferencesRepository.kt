@@ -23,7 +23,7 @@ class AppPreferencesRepository(private val context: Context) {
     val appSettingsFlow: Flow<AppSettings> = context.appPreferencesDataStore.data.map { prefs ->
         AppSettings(
             themeMode = prefs[PreferencesKeys.themeMode]?.toAppThemeMode() ?: AppThemeMode.DARK,
-            languageCode = prefs[PreferencesKeys.languageCode] ?: "en",
+            languageCode = prefs[PreferencesKeys.languageCode] ?: "vi",
             autoReconnectLastDevice = prefs[PreferencesKeys.autoReconnectLastDevice] ?: true,
             autoScanOnCastTab = prefs[PreferencesKeys.autoScanOnCastTab] ?: true,
             keepScreenOn = prefs[PreferencesKeys.keepScreenOn] ?: false,
