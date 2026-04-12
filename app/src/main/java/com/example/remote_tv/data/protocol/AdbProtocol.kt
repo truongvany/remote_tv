@@ -224,53 +224,35 @@ class AdbProtocol : TVProtocol {
             }
 
             // For stability, use input text first for common cases.
-            // For Unicode, try cmd input and clipboard before classic input fallback.
             val hasNonAscii = normalized.any { ch -> ch.code > 127 }
 
-            if (!hasNonAscii) {
-                val injected = sendTextByInputCommand(normalized)
-                if (injected) {
-                    InAppDiagnostics.info(TAG, "ADB text sent via input text")
-                    return@withContext true
-                }
-
-                InAppDiagnostics.warn(TAG, "ADB TEXT input path failed, trying clipboard fallback")
-                val pasted = sendTextViaClipboard(normalized)
-                if (pasted) {
-                    InAppDiagnostics.info(TAG, "ADB text sent via clipboard fallback")
-                    return@withContext true
-                } else {
-                    InAppDiagnostics.error(TAG, "ADB text failed on both input and clipboard paths")
-                }
-
-                val sentByCmdInput = sendTextViaCmdInput(normalized)
-                if (sentByCmdInput) {
-                    InAppDiagnostics.info(TAG, "ADB text sent via cmd input final fallback")
-                }
-                return@withContext sentByCmdInput
-            }
-
-            val pasted = sendTextViaClipboard(normalized)
-            if (pasted) {
-                InAppDiagnostics.info(TAG, "ADB text sent via robust clipboard (unicode path)")
-                return@withContext true
+            if (hasNonAscii) {
+                InAppDiagnostics.info(TAG, "ADB TEXT contains Unicode, converting to Search Intent")
+                return@withContext sendSearchQuery(normalized)
             }
 
             val injected = sendTextByInputCommand(normalized)
             if (injected) {
-                InAppDiagnostics.info(TAG, "ADB text sent via input text unicode fallback")
+                InAppDiagnostics.info(TAG, "ADB text sent via input text")
                 return@withContext true
+            }
+
+            InAppDiagnostics.warn(TAG, "ADB TEXT input path failed, trying clipboard fallback")
+            val pasted = sendTextViaClipboard(normalized)
+            if (pasted) {
+                InAppDiagnostics.info(TAG, "ADB text sent via clipboard fallback")
+                return@withContext true
+            } else {
+                InAppDiagnostics.error(TAG, "ADB text failed on both input and clipboard paths")
             }
 
             val sentByCmdInput = sendTextViaCmdInput(normalized)
             if (sentByCmdInput) {
-                InAppDiagnostics.info(TAG, "ADB text sent via cmd input unicode final fallback")
-                return@withContext true
+                InAppDiagnostics.info(TAG, "ADB text sent via cmd input final fallback")
             }
-
-            InAppDiagnostics.error(TAG, "ADB text failed on clipboard + input + cmd-input unicode paths")
-            return@withContext false
+            return@withContext sentByCmdInput
         }
+
 
         val keyCode = keyMap[command] ?: run {
             InAppDiagnostics.warn(TAG, "ADB: unknown command $command"); return@withContext false
