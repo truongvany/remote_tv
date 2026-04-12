@@ -110,6 +110,7 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
             when (uiState.selectedTab) {
                 0 -> MainRemoteTab(viewModel)
                 1 -> ChannelsScreen(
+                    isConnected = currentDevice != null && currentDevice!!.isConnected,
                     onLaunchApp = { packageName ->
                         // Bắn cái packageName (ví dụ: com.google.android.youtube.tv) vào ViewModel
                         viewModel.launchApp(packageName)

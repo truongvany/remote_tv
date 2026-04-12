@@ -1,8 +1,12 @@
 package com.example.remote_tv.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -11,330 +15,382 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_tv.ui.theme.ButtonBackground
-import com.example.remote_tv.ui.theme.CardBackground
-import com.example.remote_tv.ui.theme.OrangeAccent
-import com.example.remote_tv.ui.theme.TextSecondary
 
-// 1. Sửa Data Class: Đổi Channel thành AppItem và thêm packageName
-data class TrendingItem(val title: String, val category: String, val isNew: Boolean = false, val isLive: Boolean = false)
-data class AppItem(val name: String, val subtitle: String, val packageName: String, val isSelected: Boolean = false)
+// ──────────────── DATA MODELS ────────────────
+
+data class TrendingItem(
+    val title: String,
+    val category: String,
+    val icon: ImageVector,
+    val isNew: Boolean = false,
+    val isLive: Boolean = false
+)
+
+data class AppItem(
+    val name: String,
+    val subtitle: String,
+    val packageName: String,
+    val isSelected: Boolean = false,
+    val themeColor: Color = Color(0xFF888888),
+    val logoIcon: ImageVector? = null,
+    val logoLabel: String? = null
+)
+
+// ──────────────── DATA ────────────────
 
 private val trendingList = listOf(
-    TrendingItem("Quick Launch", "Trải nghiệm mượt mà", isNew = true),
-    TrendingItem("Cast Screen", "Chia sẻ màn hình", isLive = true),
-    TrendingItem("Cài đặt", "Hệ thống", isNew = true)
+    TrendingItem("Quick Launch", "Trải nghiệm mượt mà", Icons.Filled.Bolt, isNew = true),
+    TrendingItem("Cast Screen",  "Chia sẻ màn hình",   Icons.Filled.Cast, isLive = true),
+    TrendingItem("Cài đặt",     "Hệ thống",            Icons.Filled.Settings)
 )
 
-// 2. Danh sách App thực tế trên Android TV
 private val appList = listOf(
-    AppItem("YouTube", "Video & Music", "com.google.android.youtube.tv", isSelected = true),
-    AppItem("Netflix", "Movies & Shows", "com.netflix.ninja"),
-    AppItem("Play Store", "Tải ứng dụng", "com.android.vending"),
-    AppItem("Cài đặt", "Hệ thống TV", "am start -a android.settings.SETTINGS"),
-    AppItem("Prime", "Amazon Video", "com.amazon.amazonvideo.livingroom"),
-    AppItem("Spotify", "Music", "com.spotify.tv.android")
+    AppItem(
+        name        = "YouTube",
+        subtitle    = "Video & Shorts",
+        packageName = "com.google.android.youtube.tv",
+        themeColor  = Color(0xFFFF0000),
+        logoIcon    = Icons.Filled.PlayArrow
+    ),
+    AppItem(
+        name        = "Netflix",
+        subtitle    = "Movies & Series",
+        packageName = "com.netflix.ninja",
+        themeColor  = Color(0xFFE50914),
+        logoLabel   = "N"
+    ),
+    AppItem(
+        name        = "FPT Play",
+        subtitle    = "Truyền hình Việt",
+        packageName = "com.fptplay.nettv",
+        themeColor  = Color(0xFFFF6A2A),
+        logoIcon    = Icons.Filled.Tv
+    ),
+    AppItem(
+        name        = "YT Music",
+        subtitle    = "Âm nhạc trực tuyến",
+        packageName = "com.google.android.youtube.tvmusic",
+        themeColor  = Color(0xFFFF0044),
+        logoIcon    = Icons.Filled.MusicNote
+    ),
+    AppItem(
+        name        = "Prime Video",
+        subtitle    = "Amazon Originals",
+        packageName = "com.amazon.amazonvideo.livingroom",
+        themeColor  = Color(0xFF00A0D6),
+        logoIcon    = Icons.Filled.PlayArrow
+    ),
+    AppItem(
+        name        = "Cài đặt",
+        subtitle    = "Hệ thống TV",
+        packageName = "com.android.tv.settings",
+        themeColor  = Color(0xFF8E8E93),
+        logoIcon    = Icons.Filled.Settings
+    )
 )
+
+// ──────────────── MAIN SCREEN ────────────────
 
 @Composable
 fun ChannelsScreen(
-    onLaunchApp: (String) -> Unit = {} // Hàm callback bắn Package Name ra ngoài để xử lý
+    isConnected: Boolean = false,
+    onLaunchApp: (String) -> Unit = {}
 ) {
+    var selectedPackage by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val bgColor = MaterialTheme.colorScheme.background
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 18.dp)
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
-        ChannelsHeader()
-
-        Spacer(modifier = Modifier.height(24.dp))
-        SearchBar()
-
-        Spacer(modifier = Modifier.height(32.dp))
-        SectionHeader(title = "Tính năng", hasViewAll = false)
-
-        Spacer(modifier = Modifier.height(16.dp))
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 8.dp)
-        ) {
-            items(trendingList) { item ->
-                TrendingCard(item)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Quick Launch",
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(ButtonBackground, RoundedCornerShape(14.dp))
-                    .clickable { },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.FilterList, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-            }
-        }
-
         Spacer(modifier = Modifier.height(20.dp))
 
-        // App Grid
+        // ── Page title ──
+        Text(
+            text = "Channels",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Search bar ──
+        SimpleSearchBar()
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // ── Features ──
+        Label("Tính năng")
+        Spacer(modifier = Modifier.height(12.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(end = 2.dp)
+        ) {
+            items(trendingList) { FeatureChip(it) }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // ── Quick Launch ──
+        Label("Quick Launch")
+        Spacer(modifier = Modifier.height(12.dp))
+
         appList.chunked(2).forEach { rowItems ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                rowItems.forEach { appItem ->
-                    AppCard(
-                        appItem = appItem,
+                rowItems.forEach { app ->
+                    val isAppSelected = isConnected && app.packageName == selectedPackage
+                    CleanAppCard(
+                        appItem  = app.copy(isSelected = isAppSelected),
                         modifier = Modifier.weight(1f),
-                        onClick = {
-                            // Khi click sẽ gọi hàm này và ném Package Name ra ngoài
-                            onLaunchApp(appItem.packageName)
+                        onClick  = {
+                            if (isConnected) {
+                                selectedPackage = app.packageName
+                            }
+                            onLaunchApp(app.packageName)
                         }
                     )
                 }
-                if (rowItems.size < 2) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
+                if (rowItems.size < 2) Spacer(modifier = Modifier.weight(1f))
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
         Spacer(modifier = Modifier.height(100.dp))
     }
 }
 
+// ──────────────── SEARCH BAR ────────────────
+
 @Composable
-fun ChannelsHeader() {
+fun SimpleSearchBar() {
+    val cardColor = MaterialTheme.colorScheme.secondary
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .background(OrangeAccent, RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Search, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "COMMAND",
-                color = OrangeAccent,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 22.sp,
-                letterSpacing = 1.sp
-            )
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
-            Spacer(modifier = Modifier.width(20.dp))
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF252525))
-            )
-        }
-    }
-}
-
-@Composable
-fun SearchBar() {
-    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(60.dp)
-            .background(Color(0xFF0F0F0F), RoundedCornerShape(20.dp))
-            .padding(horizontal = 20.dp),
-        contentAlignment = Alignment.CenterStart
+            .height(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(cardColor)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = Color(0xFF333333), modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "Search apps or commands",
-                color = Color(0xFF555555),
-                fontSize = 15.sp
-            )
-        }
-    }
-}
-
-@Composable
-fun SectionHeader(title: String, hasViewAll: Boolean = false) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom
-    ) {
+        Icon(
+            Icons.Filled.Search,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
         Text(
-            text = title,
-            color = Color.White,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold
+            text = "Tìm ứng dụng...",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
         )
-        if (hasViewAll) {
-            Text(
-                text = "VIEW ALL",
-                color = OrangeAccent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
     }
 }
 
+// ──────────────── LABEL ────────────────
+
 @Composable
-fun TrendingCard(item: TrendingItem) {
-    Box(
+fun Label(text: String) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.8.sp,
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
+    )
+}
+
+// ──────────────── FEATURE CHIP ────────────────
+
+@Composable
+fun FeatureChip(item: TrendingItem) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f),
+        label = "scale"
+    )
+
+    Row(
         modifier = Modifier
-            .width(280.dp)
-            .height(160.dp)
-            .clip(RoundedCornerShape(30.dp))
-            .background(Color(0xFF1A1A1A))
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)),
-                        startY = 50f
-                    )
-                )
-        )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(20.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (item.isNew) {
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF3D1E16), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text("HOT", color = OrangeAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                }
-                if (item.isLive) {
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF2D1010), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text("LIVE", color = Color.Red, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                }
-                Text(item.category, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                item.title,
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold
+            .scale(scale)
+            .height(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.secondary)
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f),
+                RoundedCornerShape(12.dp)
             )
-        }
-    }
-}
-
-// 3. Đổi ChannelCard thành AppCard
-@Composable
-fun AppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val isSelected = appItem.isSelected
-    val backgroundColor = if (isSelected) Color(0xFF151515) else Color(0xFF151515)
-    val borderColor = if (isSelected) OrangeAccent.copy(alpha = 0.5f) else Color.Transparent
-
-    Box(
-        modifier = modifier
-            .height(150.dp)
-            .clip(RoundedCornerShape(40.dp))
-            .background(backgroundColor)
-            .then(if (isSelected) Modifier.border(1.5.dp, borderColor, RoundedCornerShape(40.dp)) else Modifier)
-            .clickable { onClick() } // GỌI SỰ KIỆN CLICK Ở ĐÂY
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
+            .clickable(interactionSource = interactionSource, indication = null) {}
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (isSelected) {
+        Icon(
+            item.icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.75f),
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = item.title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSecondary
+        )
+        if (item.isLive) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = (-4).dp, y = 4.dp)
-                    .size(6.dp)
-                    .background(OrangeAccent, CircleShape)
-            )
+                    .background(Color(0xFFFF3B30), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            ) {
+                Text("LIVE", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+            }
         }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = appItem.name,
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
-            )
-
-            if (isSelected) {
-                Spacer(modifier = Modifier.height(16.dp))
+        if (item.isNew) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            ) {
                 Text(
-                    text = "NOW PLAYING",
-                    color = OrangeAccent,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = appItem.subtitle,
-                    color = Color.White,
-                    fontSize = 14.sp,
+                    "NEW",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Bold
                 )
-            } else {
-                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+// ──────────────── CLEAN APP CARD ────────────────
+
+@Composable
+fun CleanAppCard(appItem: AppItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f),
+        label = "scale"
+    )
+
+    val shape = RoundedCornerShape(20.dp)
+    val borderColor = if (appItem.isSelected)
+        appItem.themeColor.copy(alpha = 0.5f)
+    else
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.secondary)
+            .border(1.dp, borderColor, shape)
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+            .padding(vertical = 20.dp, horizontal = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Icon container
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(appItem.themeColor.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (appItem.logoLabel != null) {
                 Text(
-                    text = appItem.subtitle,
-                    color = Color.Gray,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    text = appItem.logoLabel,
+                    color = appItem.themeColor,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            } else if (appItem.logoIcon != null) {
+                Icon(
+                    imageVector = appItem.logoIcon,
+                    contentDescription = appItem.name,
+                    tint = appItem.themeColor,
+                    modifier = Modifier.size(26.dp)
                 )
             }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = appItem.name,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSecondary,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(3.dp))
+
+        // "Playing" indicator dành riêng cho selected
+        if (appItem.isSelected) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .background(appItem.themeColor, CircleShape)
+                )
+                Text(
+                    text = "Đang phát",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = appItem.themeColor
+                )
+            }
+        } else {
+            Text(
+                text = appItem.subtitle,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.45f),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
