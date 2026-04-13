@@ -136,6 +136,8 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
             when (uiState.selectedTab) {
                 0 -> MainRemoteTab(viewModel)
                 1 -> ChannelsScreen(
+                    isTvConnected = currentDevice != null,
+                    launchedAppId = uiState.launchedAppId,
                     onLaunchApp = { packageName ->
                         viewModel.launchApp(packageName)
                     }

@@ -201,7 +201,10 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         repository.clearDiagnosticLogs()
     }
 
-    fun disconnect() = repository.disconnect()
+    fun disconnect() {
+        repository.disconnect()
+        _uiState.update { it.copy(launchedAppId = null) }
+    }
 
     // ----------------------------------------------------------------
     // Auto-Reconnect
@@ -318,7 +321,12 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     // ĐÃ UPDATE: KẾT HỢP REPOSITORY CỦA Ý VÀ ADB CỦA HUY
     // =======================================================
     fun launchApp(appId: String) {
+        if (appId == "NOT_CONNECTED") {
+            _uiState.update { it.copy(actionMessage = "Vui lòng kết nối TV trước khi dùng Quick Launch") }
+            return
+        }
         viewModelScope.launch {
+            _uiState.update { it.copy(launchedAppId = appId) }
             // Bước 1: Thử gọi theo luồng chuẩn của Repository
             val result = repository.launchApp(appId)
 
@@ -336,10 +344,10 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
                     if (adbSuccess) {
                         _uiState.update { it.copy(actionMessage = "Đã gửi lệnh mở App qua ADB") }
                     } else {
-                        _uiState.update { it.copy(actionMessage = "ADB thất bại: TV chưa bật gỡ lỗi hoặc sai IP") }
+                        _uiState.update { it.copy(actionMessage = "ADB thất bại: TV chưa bật gỡ lỗi hoặc sai IP", launchedAppId = null) }
                     }
                 } else {
-                    _uiState.update { it.copy(actionMessage = "Vui lòng kết nối TV trước khi dùng Quick Launch") }
+                    _uiState.update { it.copy(actionMessage = "Vui lòng kết nối TV trước khi dùng Quick Launch", launchedAppId = null) }
                 }
             } else {
                 // Nếu giao thức gốc mở thành công

@@ -56,6 +56,14 @@ fun QuickLaunch(
     isEnabled: Boolean = true,
     onLaunchApp: (String) -> Unit = {}
 ) {
+    var activeAppId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isEnabled) {
+        if (!isEnabled) {
+            activeAppId = null
+        }
+    }
+
     val displayApps = if (apps.isEmpty()) {
         defaultAppShortcuts
     } else {
@@ -90,13 +98,37 @@ fun QuickLaunch(
         ) {
             displayApps.forEach { app ->
                 val iconUrl = apps.find { it.id == app.packageId }?.iconUrl
-                AppCard(
-                    app       = app,
-                    iconUrl   = iconUrl,
-                    isEnabled = isEnabled,
-                    modifier  = Modifier.weight(1f),
-                    onClick   = { onLaunchApp(app.packageId) }
-                )
+                val isActive = (app.packageId == activeAppId) && isEnabled
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AppCard(
+                        app       = app,
+                        iconUrl   = iconUrl,
+                        isEnabled = isEnabled,
+                        isActive  = isActive,
+                        modifier  = Modifier.fillMaxWidth(),
+                        onClick   = { 
+                            if (isEnabled) activeAppId = app.packageId
+                            onLaunchApp(app.packageId) 
+                        }
+                    )
+                    
+                    if (isActive) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "đang phát",
+                            fontSize = 10.sp,
+                            color = app.themeColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        // Keep consistent height
+                        Spacer(modifier = Modifier.height(18.dp))
+                    }
+                }
             }
         }
     }
@@ -109,6 +141,7 @@ fun AppCard(
     app: AppShortcut,
     iconUrl: String? = null,
     isEnabled: Boolean = true,
+    isActive: Boolean = false,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
@@ -123,19 +156,19 @@ fun AppCard(
     Box(
         modifier = modifier
             .scale(scale)
-            .alpha(if (isEnabled) 1f else 0.4f)
+            .alpha(if (isEnabled) 1f else 0.6f)
             .height(58.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.secondary)
+            .background(if (isActive) app.themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.secondary)
             .border(
-                1.dp,
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f),
-                RoundedCornerShape(14.dp)
+                width = if (isActive) 1.5.dp else 1.dp,
+                color = if (isActive) app.themeColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f),
+                shape = RoundedCornerShape(14.dp)
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication        = null,
-                enabled           = isEnabled
+                enabled           = true // Allow click regardless of isEnabled to show error message
             ) { onClick() },
         contentAlignment = Alignment.Center
     ) {

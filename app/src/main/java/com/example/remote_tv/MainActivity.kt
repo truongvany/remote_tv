@@ -2,7 +2,7 @@ package com.example.remote_tv
 
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
@@ -18,7 +18,7 @@ import com.example.remote_tv.ui.screens.SplashScreen
 import com.example.remote_tv.ui.theme.REMOTE_TVTheme
 import com.example.remote_tv.ui.viewmodel.TVViewModel
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

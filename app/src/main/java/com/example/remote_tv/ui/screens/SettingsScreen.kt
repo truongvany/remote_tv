@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.remote_tv.R
 import com.example.remote_tv.data.model.AppThemeMode
+import com.example.remote_tv.data.preferences.LocaleManager
 import com.example.remote_tv.ui.viewmodel.SettingsUiState
 
 private data class LanguageOption(val code: String, val label: String)
@@ -232,6 +233,7 @@ fun SettingsScreen(
                                 text = { Text(option.label) },
                                 onClick = {
                                     languageMenuExpanded = false
+                                    LocaleManager.applyLanguage(option.code)
                                     onLanguageChanged(option.code)
                                 },
                             )

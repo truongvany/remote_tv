@@ -69,7 +69,6 @@ private val appList = listOf(
         name        = "YouTube",
         subtitle    = "Video & Shorts",
         packageName = "com.google.android.youtube.tv",
-        isSelected  = true,
         themeColor  = Color(0xFFFF0000),
         logoIcon    = Icons.Filled.PlayArrow
     ),
@@ -114,6 +113,8 @@ private val appList = listOf(
 
 @Composable
 fun ChannelsScreen(
+    isTvConnected: Boolean = false,
+    launchedAppId: String? = null,
     onLaunchApp: (String) -> Unit = {}
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
@@ -164,10 +165,17 @@ fun ChannelsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 rowItems.forEach { app ->
+                    val isSelected = app.packageName == launchedAppId
                     CleanAppCard(
-                        appItem  = app,
+                        appItem  = app.copy(isSelected = isSelected),
                         modifier = Modifier.weight(1f),
-                        onClick  = { onLaunchApp(app.packageName) }
+                        onClick  = { 
+                            if (isTvConnected) {
+                                onLaunchApp(app.packageName)
+                            } else {
+                                onLaunchApp("NOT_CONNECTED") 
+                            }
+                        }
                     )
                 }
                 if (rowItems.size < 2) Spacer(modifier = Modifier.weight(1f))

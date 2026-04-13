@@ -9,5 +9,6 @@ data class RemoteUiState(
     val localSubnet: String? = null,
     val showNowPlaying: Boolean = false,
     val actionMessage: String? = null,
+    val launchedAppId: String? = null,
 )
 
