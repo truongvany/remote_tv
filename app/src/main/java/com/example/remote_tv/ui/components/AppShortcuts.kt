@@ -76,10 +76,10 @@ fun QuickLaunch(
         // Label
         Text(
             text          = "QUICK LAUNCH",
-            fontSize      = 10.sp,
-            fontWeight    = FontWeight.SemiBold,
-            letterSpacing = 1.2.sp,
-            color         = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.5f)
+            fontSize      = 11.sp,
+            fontWeight    = FontWeight.Bold,
+            letterSpacing = 1.5.sp,
+            color         = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.6f)
         )
 
         Spacer(modifier = Modifier.height(10.dp))
