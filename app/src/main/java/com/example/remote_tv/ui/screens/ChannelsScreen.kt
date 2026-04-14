@@ -131,7 +131,7 @@ fun ChannelsScreen(
         Text(
             text = "Channels",
             fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground
         )
 
