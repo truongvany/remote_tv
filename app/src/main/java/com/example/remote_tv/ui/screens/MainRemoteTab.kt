@@ -269,7 +269,7 @@ fun MainRemoteTab(viewModel: TVViewModel) {
                 onModeSelected = { viewModel.selectMode(it) }
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(30.dp))
 
             when (uiState.selectedMode) {
                 0 -> DPad(
