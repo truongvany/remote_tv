@@ -107,7 +107,7 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
             // Subtitle
             Text(
                 text = "Universal Remote Control",
-                color = Color(0xFF00d4ff).copy(alpha = 0.6f),
+                color = Color(0xFF00d4ff).copy(alpha = 0.65f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 1.sp
