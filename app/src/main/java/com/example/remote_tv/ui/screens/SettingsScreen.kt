@@ -406,7 +406,7 @@ private fun SettingsPanel(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                letterSpacing = 0.8.sp,
+                letterSpacing = 0.9.sp,
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
