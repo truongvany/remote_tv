@@ -1,6 +1,7 @@
 package com.example.remote_tv.ui.screens
 
 import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.Intent
 import android.widget.Toast
+import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.AppThemeMode
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
@@ -63,8 +65,11 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
     var lastConnectedKey by remember { mutableStateOf<String?>(null) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = viewModel::onLocationPermissionResult,
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { result ->
+            val allGranted = result.values.all { it }
+            viewModel.onLocationPermissionResult(allGranted)
+        },
     )
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -86,7 +91,7 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
             if (uiState.hasLocationPermission) {
                 viewModel.onCastTabOpened()
             } else {
-                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                locationPermissionLauncher.launch(discoveryPermissions())
             }
         }
     }
@@ -156,49 +161,35 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
                     isCastSessionActive = isCasting,
                     castStatus = castStatus,
                     onRequestPermission = {
-                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                        locationPermissionLauncher.launch(discoveryPermissions())
                     },
                     onRefreshScan = {
                         if (uiState.hasLocationPermission) {
                             viewModel.refreshCastScan()
                         } else {
-                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                            locationPermissionLauncher.launch(discoveryPermissions())
                         }
                     },
                     onDeviceSelected = viewModel::connectToDevice,
+                    onPairAndConnect = viewModel::pairAndConnectToDevice,
                     onClearDiagnostics = viewModel::clearDiagnosticLogs,
                     onScreenMirroringClick = {
-                        val candidates = listOf(
-                            Intent("android.settings.panel.action.CAST"),
-                            Intent(android.provider.Settings.ACTION_CAST_SETTINGS),
-                            Intent("android.settings.CAST_SETTINGS"),
-                            Intent("android.settings.WIFI_DISPLAY_SETTINGS"),
-                            Intent(android.provider.Settings.ACTION_SETTINGS),
-                        )
-
-                        var opened = false
-                        for (intent in candidates) {
-                            val launchIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            val canHandle = launchIntent.resolveActivity(context.packageManager) != null
-                            if (canHandle) {
-                                runCatching {
-                                    context.startActivity(launchIntent)
-                                    opened = true
-                                }
-                                if (opened) break
-                            }
-                        }
+                        val opened = openScreenMirroringSettings(context)
 
                         if (opened) {
                             val target = currentDevice?.name
                             val message = if (target != null) {
-                                "Select $target to start screen mirroring"
+                                "Select $target, then tap Start now to mirror this phone"
                             } else {
-                                "Select your TV in Cast settings to mirror this phone"
+                                "Select your TV, then tap Start now to mirror this phone"
                             }
                             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         } else {
-                            Toast.makeText(context, "Cannot open Cast settings on this phone", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                "Không mở được màn Cast trực tiếp. Hãy mở Quick Settings > Cast/Smart View để truyền màn hình.",
+                                Toast.LENGTH_LONG,
+                            ).show()
                         }
                     },
                     onPickImage = { imagePickerLauncher.launch("image/*") },
@@ -226,6 +217,49 @@ fun RemoteScreen(viewModel: TVViewModel = viewModel()) {
             }
         }
     }
+}
+
+private fun discoveryPermissions(): Array<String> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.NEARBY_WIFI_DEVICES,
+        )
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+}
+
+private fun openScreenMirroringSettings(context: android.content.Context): Boolean {
+    val candidates = listOf(
+        Intent("android.settings.panel.action.CAST"),
+        Intent(android.provider.Settings.ACTION_CAST_SETTINGS),
+        Intent("android.settings.CAST_SETTINGS"),
+        Intent("android.settings.WIFI_DISPLAY_SETTINGS"),
+        Intent("com.samsung.android.smartmirroring.CAST_SETTINGS"),
+        Intent("com.android.settings.WIFI_DISPLAY_SETTINGS"),
+    )
+
+    candidates.forEach { intent ->
+        val launchIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val canHandle = launchIntent.resolveActivity(context.packageManager) != null
+        if (!canHandle) {
+            return@forEach
+        }
+
+        val opened = runCatching {
+            context.startActivity(launchIntent)
+            true
+        }.getOrElse { false }
+
+        if (opened) {
+            InAppDiagnostics.info("RemoteScreen", "Opened mirroring settings via action=${intent.action}")
+            return true
+        }
+    }
+
+    InAppDiagnostics.warn("RemoteScreen", "No mirroring settings activity available")
+    return false
 }
 
 @Composable

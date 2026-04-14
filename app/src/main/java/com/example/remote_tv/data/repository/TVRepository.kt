@@ -23,6 +23,7 @@ interface TVRepository {
     fun clearDiagnosticLogs()
     fun disconnect()
     fun scheduleReconnect()
+    suspend fun pairAndConnectAndroidTv(device: TVDevice, pairPort: Int, pairingCode: String): Boolean
     suspend fun sendCommand(command: String): Boolean
     suspend fun launchApp(appId: String): AppLaunchResult
 

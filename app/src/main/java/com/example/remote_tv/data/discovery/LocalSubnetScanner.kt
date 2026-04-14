@@ -50,8 +50,9 @@ class LocalSubnetScanner(context: Context) {
                 candidatePorts.forEach { port ->
                     semaphore.withPermit {
                         if (isTcpPortOpen(ipAddress, port, connectTimeoutMs)) {
+                            val device = buildScannedDevice(ipAddress, port) ?: return@withPermit
                             val key = "$ipAddress:$port"
-                            discovered.putIfAbsent(key, buildScannedDevice(ipAddress, port))
+                            discovered.putIfAbsent(key, device)
                         }
                     }
                 }
@@ -99,7 +100,7 @@ class LocalSubnetScanner(context: Context) {
         }.getOrElse { false }
     }
 
-    private fun buildScannedDevice(ipAddress: String, port: Int): TVDevice {
+    private fun buildScannedDevice(ipAddress: String, port: Int): TVDevice? {
         val brand = when (port) {
             8002, 8001 -> TVBrand.SAMSUNG
             3000 -> TVBrand.LG
@@ -109,6 +110,11 @@ class LocalSubnetScanner(context: Context) {
             5555 -> TVBrand.UNKNOWN
             8009 -> TVBrand.UNKNOWN
             else -> TVBrand.UNKNOWN
+        }
+
+        // Keep unsupported endpoints filtered, but preserve 8009 as cast fallback when NSD is unavailable.
+        if (brand == TVBrand.ROKU || brand == TVBrand.FIRE_TV) {
+            return null
         }
 
         val label = when (brand) {

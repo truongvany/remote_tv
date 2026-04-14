@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.model.isCastOnlyEndpoint
 
 @Composable
 fun DeviceSelectionDialog(
@@ -29,7 +30,7 @@ fun DeviceSelectionDialog(
     onManualConnect: (String, Int) -> Unit
 ) {
     var ipAddress by remember { mutableStateOf("10.0.2.2") }
-    var port by remember { mutableStateOf("6466") }
+    var port by remember { mutableStateOf("5555") }
     var showManualFields by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -68,7 +69,7 @@ fun DeviceSelectionDialog(
                 } else {
                     // Emulator hint
                     Text(
-                        "Emulator: IP = 10.0.2.2, Port = 6466",
+                        "ADB thường dùng port 5555. Nếu TV dùng Wireless Debugging, hãy nhập connect port đang hiển thị trên TV.",
                         color = MaterialTheme.colorScheme.primary, fontSize = 11.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -124,6 +125,8 @@ fun DeviceSelectionDialog(
 
 @Composable
 fun DeviceItem(device: TVDevice, onClick: (TVDevice) -> Unit) {
+    val isCastOnly = device.isCastOnlyEndpoint()
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -137,7 +140,19 @@ fun DeviceItem(device: TVDevice, onClick: (TVDevice) -> Unit) {
         Spacer(modifier = Modifier.width(16.dp))
         Column {
             Text(device.name, color = MaterialTheme.colorScheme.onSecondary, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text("${device.ipAddress}:${device.port}", color = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f), fontSize = 12.sp)
+            Text(
+                text = if (isCastOnly) {
+                    "${device.ipAddress}:${device.port} • CAST ONLY"
+                } else {
+                    "${device.ipAddress}:${device.port}"
+                },
+                color = if (isCastOnly) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                } else {
+                    MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.6f)
+                },
+                fontSize = 12.sp,
+            )
         }
     }
 }

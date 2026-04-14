@@ -1,6 +1,7 @@
 package com.example.remote_tv
 
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
@@ -17,11 +18,20 @@ import com.example.remote_tv.ui.screens.RemoteScreen
 import com.example.remote_tv.ui.screens.SplashScreen
 import com.example.remote_tv.ui.theme.REMOTE_TVTheme
 import com.example.remote_tv.ui.viewmodel.TVViewModel
+import com.google.android.gms.cast.framework.CastContext
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        runCatching {
+            CastContext.getSharedInstance(this)
+            Log.d("MainActivity", "CastContext warmed up")
+        }.onFailure { error ->
+            Log.w("MainActivity", "CastContext warm-up failed: ${error.message}")
+        }
+
         setContent {
             val viewModel: TVViewModel = viewModel()
             val settingsUiState by viewModel.settingsUiState.collectAsState()

@@ -80,6 +80,9 @@ class LGProtocol(private val client: HttpClient) : TVProtocol {
             "KEY_VOL_DOWN" to "VOLUMEDOWN",
             "KEY_MENU" to "MENU",
             "KEY_INFO" to "INFO",
+            "KEY_SEARCH" to "SEARCH",
+            "SEARCH" to "SEARCH",
+            "KEY_FINDER" to "SEARCH",
             "KEY_POWER" to "POWER",
             "KEY_PLAY" to "PLAY",
             "KEY_PAUSE" to "PAUSE",
@@ -130,6 +133,8 @@ class LGProtocol(private val client: HttpClient) : TVProtocol {
             "KEY_CHANNEL_DOWN", "KEY_CH_DOWN" -> sendLgRequest(URI_CHANNEL_DOWN)
             "KEY_POWER" -> sendLgRequest(URI_POWER_OFF)
             "KEY_HOME" -> sendLgRequest(URI_HOME)
+            "KEY_SEARCH", "SEARCH", "KEY_FINDER" ->
+                sendLgRequest(URI_BUTTON, buildJsonObject { put("keyCode", "SEARCH") })
             "KEY_ENTER", "OK" -> sendLgRequest(URI_ENTER)
             "KEY_PLAY" -> sendLgRequest(URI_MEDIA_PLAY)
             "KEY_PAUSE" -> sendLgRequest(URI_MEDIA_PAUSE)

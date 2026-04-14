@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ScreenShare
@@ -32,10 +33,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.mediarouter.app.MediaRouteButton
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.model.isCastOnlyEndpoint
 import com.google.android.gms.cast.framework.CastButtonFactory
 
 @Composable
@@ -55,6 +58,7 @@ fun CastScreen(
     onRequestPermission: () -> Unit,
     onRefreshScan: () -> Unit,
     onDeviceSelected: (TVDevice) -> Unit,
+    onPairAndConnect: (TVDevice, Int, String, Int) -> Unit,
     onClearDiagnostics: () -> Unit,
     onScreenMirroringClick: () -> Unit = {},
     onPickImage: () -> Unit = {},
@@ -62,6 +66,8 @@ fun CastScreen(
     onStopCasting: () -> Unit = {},
 ) {
     var showDebugInfo by rememberSaveable { mutableStateOf(false) }
+    var adbPortDialogDevice by remember { mutableStateOf<TVDevice?>(null) }
+    var openCastChooser by remember { mutableStateOf<(() -> Unit)?>(null) }
     val context = LocalContext.current
 
     Column(
@@ -72,7 +78,7 @@ fun CastScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(16.dp))
-        CastHeader()
+        CastHeader(onRouteButtonReady = { launcher -> openCastChooser = launcher })
 
         Spacer(modifier = Modifier.height(40.dp))
         
@@ -112,8 +118,17 @@ fun CastScreen(
             Spacer(modifier = Modifier.height(10.dp))
             OutlinedButton(
                 onClick = {
-                    openCastSettings(context)
-                    Toast.makeText(context, "Choose Google TV in Cast settings first", Toast.LENGTH_SHORT).show()
+                    val chooserOpened = runCatching {
+                        openCastChooser?.invoke()
+                        openCastChooser != null
+                    }.getOrElse { false }
+
+                    if (chooserOpened) {
+                        Toast.makeText(context, "Select your TV from Cast chooser", Toast.LENGTH_SHORT).show()
+                    } else {
+                        openCastSettings(context)
+                        Toast.makeText(context, "Open Cast settings manually", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
@@ -165,6 +180,7 @@ fun CastScreen(
                 localSubnet = localSubnet,
                 isScanning = isScanning,
                 hasLocationPermission = hasLocationPermission,
+                devices = devices,
                 logs = diagnosticLogs,
                 onClearLogs = onClearDiagnostics,
             )
@@ -189,11 +205,45 @@ fun CastScreen(
                     connectedDevice?.ipAddress == device.ipAddress &&
                         connectedDevice?.port == device.port
                 val isConnecting = connectingDeviceKey == connectionKey
+                val isCastOnly = device.isCastOnlyEndpoint()
                 DeviceItem(
                     device = device,
                     isConnected = isConnected,
                     isConnecting = isConnecting,
-                    onClick = { onDeviceSelected(device) }
+                    onClick = {
+                        if (isCastOnly) {
+                            val chooserOpened = runCatching {
+                                openCastChooser?.invoke()
+                                openCastChooser != null
+                            }.getOrElse { false }
+
+                            if (chooserOpened) {
+                                Toast.makeText(
+                                    context,
+                                    "Thiết bị này là Cast endpoint. Hãy chọn TV trong Cast chooser.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            } else {
+                                openCastSettings(context)
+                                Toast.makeText(
+                                    context,
+                                    "Thiết bị này dùng Google Cast. Hãy chọn TV trong Cast settings để kết nối.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                        } else if (device.brand == TVBrand.ANDROID_TV && device.port in listOf(6466, 6467, 8008)) {
+                            if (device.pairPort == null) {
+                                Toast.makeText(
+                                    context,
+                                    "Nếu chưa thấy mã Pair trên TV: vào Developer options > Wireless debugging > Pair device with pairing code.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                            adbPortDialogDevice = device
+                        } else {
+                            onDeviceSelected(device)
+                        }
+                    }
                 )
 
                 if (index < devices.lastIndex) {
@@ -252,6 +302,163 @@ fun CastScreen(
 
         Spacer(modifier = Modifier.height(120.dp))
     }
+
+    adbPortDialogDevice?.let { targetDevice ->
+        WirelessAdbPairDialog(
+            device = targetDevice,
+            onDismiss = { adbPortDialogDevice = null },
+            onConfirm = { connectPort, pairCode, pairPort ->
+                adbPortDialogDevice = null
+
+                if (pairCode.isBlank()) {
+                    Toast.makeText(
+                        context,
+                        "Không có Pair Code. App sẽ thử kết nối ADB trực tiếp qua cổng $connectPort.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+
+                    onDeviceSelected(targetDevice.copy(port = connectPort, brand = TVBrand.ANDROID_TV))
+                    return@WirelessAdbPairDialog
+                }
+
+                if (pairPort == null || pairPort !in 1..65535) {
+                    Toast.makeText(
+                        context,
+                        "Vui lòng nhập Pair Port hợp lệ.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    return@WirelessAdbPairDialog
+                }
+
+                InAppDiagnostics.info(
+                    "CastScreen",
+                    "[PAIR_CODE_INPUT] device=${targetDevice.ipAddress} pairPort=$pairPort connectPort=$connectPort codeLength=${pairCode.length}"
+                )
+                Toast.makeText(
+                    context,
+                    "Đã nhận mã pair. App sẽ pair trước rồi mới connect ADB cổng $connectPort.",
+                    Toast.LENGTH_LONG,
+                ).show()
+
+                onPairAndConnect(targetDevice, pairPort, pairCode, connectPort)
+            },
+        )
+    }
+}
+
+@Composable
+private fun WirelessAdbPairDialog(
+    device: TVDevice,
+    onDismiss: () -> Unit,
+    onConfirm: (connectPort: Int, pairCode: String, pairPort: Int?) -> Unit,
+) {
+    val defaultConnectPort = remember(device.port) {
+        if (device.port in 30000..65535 || device.port == 5555) device.port.toString() else "5555"
+    }
+    var connectPortText by remember(device.ipAddress) { mutableStateOf(defaultConnectPort) }
+    var pairCodeText by remember(device.ipAddress) { mutableStateOf("") }
+    var pairPortText by remember(device.ipAddress) { mutableStateOf(device.pairPort?.toString().orEmpty()) }
+    val connectPort = connectPortText.toIntOrNull()
+    val pairPort = pairPortText.toIntOrNull()
+    val sanitizedCode = pairCodeText.filter { it.isDigit() }
+    val hasPairInput = pairCodeText.isNotBlank() || pairPortText.isNotBlank()
+    val hasValidPairInput = sanitizedCode.length >= 6 && pairPort != null && pairPort in 1..65535
+    val canSubmit =
+        connectPort != null &&
+            connectPort in 1..65535 &&
+            (!hasPairInput || hasValidPairInput)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = canSubmit,
+                onClick = {
+                    onConfirm(connectPort ?: 5555, sanitizedCode, pairPort)
+                },
+            ) {
+                Text(if (sanitizedCode.isBlank()) "Connect ADB" else "Pair + Connect")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        title = {
+            Text(
+                text = "Wireless Debugging Pair",
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Thiết bị ${device.name} đang phát hiện qua Android TV service (${device.port}). " +
+                        "Có thể pair trước bằng Pair Code, hoặc để trống Pair Code để thử kết nối ADB trực tiếp.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                )
+                Text(
+                    text = "IP: ${device.ipAddress}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                if (device.pairPort == null) {
+                    Text(
+                        text = "Chưa phát hiện Pair Port từ TV. Trên TV hãy mở: Developer options > Wireless debugging > Pair device with pairing code để TV hiện mã và cổng pair.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    Text(
+                        text = "Đã phát hiện Pair Port từ TV: ${device.pairPort}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                OutlinedTextField(
+                    value = pairCodeText,
+                    onValueChange = { newValue ->
+                        pairCodeText = newValue.filter { it.isDigit() }.take(8)
+                    },
+                    label = { Text("Pair Code") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = pairPortText,
+                    onValueChange = { newValue ->
+                        pairPortText = newValue.filter { it.isDigit() }.take(5)
+                    },
+                    label = { Text("Pair Port") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = connectPortText,
+                    onValueChange = { newValue ->
+                        connectPortText = newValue.filter { it.isDigit() }.take(5)
+                    },
+                    label = { Text("Connect Port") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Text(
+                    text = "Gợi ý: Pair Port và Connect Port thường khác nhau trong Wireless Debugging. Nếu chưa có mã pair, để trống Pair Code rồi bấm Connect ADB.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                if (!canSubmit) {
+                    Text(
+                        text = "Cần Connect Port hợp lệ. Nếu đã nhập Pair Code/Pair Port thì phải đủ mã (>= 6 số) và Pair Port hợp lệ.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -379,7 +586,9 @@ fun ScanningAnimationArea() {
 
 @Composable
 fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, onClick: () -> Unit) {
+    val isCastOnly = device.isCastOnlyEndpoint()
     val status = when {
+        isCastOnly -> "CAST ONLY"
         isConnecting -> "CONNECTING..."
         isConnected -> "CONNECTED"
         else -> "AVAILABLE"
@@ -390,7 +599,13 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, on
             .fillMaxWidth()
             .height(84.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(if (isConnected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary)
+            .background(
+                when {
+                    isConnected -> MaterialTheme.colorScheme.tertiary
+                    isCastOnly -> MaterialTheme.colorScheme.surface
+                    else -> MaterialTheme.colorScheme.secondary
+                }
+            )
             .then(if (isConnected) Modifier.border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(24.dp)) else Modifier)
             .clickable(enabled = !isConnecting) { onClick() }
             .padding(horizontal = 20.dp),
@@ -414,7 +629,11 @@ fun DeviceItem(device: TVDevice, isConnected: Boolean, isConnecting: Boolean, on
                 Text(device.name, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
                     status,
-                    color = if (isConnected || isConnecting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    color = when {
+                        isCastOnly -> MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+                        isConnected || isConnecting -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    },
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -566,11 +785,26 @@ private fun DebugInfoCard(
     localSubnet: String?,
     isScanning: Boolean,
     hasLocationPermission: Boolean,
+    devices: List<TVDevice>,
     logs: List<String>,
     onClearLogs: () -> Unit,
 ) {
     val ipText = localIpAddress ?: "Unavailable"
     val subnetText = localSubnet ?: "Unavailable"
+    val adbDiagnostics = devices
+        .filter { it.brand == TVBrand.ANDROID_TV }
+        .groupBy { it.ipAddress }
+        .map { (ip, entries) ->
+            val pairingPort = entries.firstNotNullOfOrNull { it.pairPort }
+            val preferred = entries.maxByOrNull { entry ->
+                var score = 0
+                if (entry.pairPort != null) score += 2
+                if (entry.port == 5555) score += 1
+                score
+            } ?: entries.first()
+            Triple(ip, preferred.name, pairingPort)
+        }
+        .sortedBy { it.first }
 
     Box(
         modifier = Modifier
@@ -608,6 +842,51 @@ private fun DebugInfoCard(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 fontSize = 11.sp,
             )
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "ADB Pairing Discovery (_adb-tls-pairing)",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            if (adbDiagnostics.isEmpty()) {
+                Text(
+                    text = "Chưa thấy Android TV endpoint trong scan hiện tại.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    fontSize = 11.sp,
+                )
+            } else {
+                adbDiagnostics.forEach { (ip, name, pairPort) ->
+                    val status = if (pairPort != null) {
+                        "Seen on $ip:$pairPort"
+                    } else {
+                        "Not seen on $ip"
+                    }
+                    val hint = if (pairPort != null) {
+                        "Pair service detected"
+                    } else {
+                        "Open Wireless debugging > Pair device with pairing code on TV"
+                    }
+
+                    Text(
+                        text = "$name - $status",
+                        color = if (pairPort != null) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = hint,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        fontSize = 10.sp,
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
@@ -702,7 +981,7 @@ fun QuickActionItem(icon: ImageVector, title: String, bgColor: Color, iconColor:
 }
 
 @Composable
-fun CastHeader() {
+fun CastHeader(onRouteButtonReady: (((() -> Unit)) -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -728,7 +1007,7 @@ fun CastHeader() {
         }
         
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CastRouteChooserButton()
+            CastRouteChooserButton(onButtonReady = onRouteButtonReady)
             Spacer(modifier = Modifier.width(20.dp))
             Box(
                 modifier = Modifier
@@ -741,7 +1020,7 @@ fun CastHeader() {
 }
 
 @Composable
-private fun CastRouteChooserButton() {
+private fun CastRouteChooserButton(onButtonReady: (((() -> Unit)) -> Unit)? = null) {
     val context = LocalContext.current
 
     AndroidView(
@@ -754,11 +1033,13 @@ private fun CastRouteChooserButton() {
         factory = { viewContext ->
             runCatching {
                 MediaRouteButton(viewContext).apply {
+                    onButtonReady?.invoke { performClick() }
                     runCatching {
                         CastButtonFactory.setUpMediaRouteButton(viewContext, this)
                     }.onFailure { error ->
                         InAppDiagnostics.warn("CastScreen", "Cast route setup failed: ${error.message}")
                         setOnClickListener { openCastSettings(viewContext) }
+                        onButtonReady?.invoke { openCastSettings(viewContext) }
                     }
                     contentDescription = "Connect Cast Route"
                 }
@@ -768,6 +1049,7 @@ private fun CastRouteChooserButton() {
                     setImageResource(android.R.drawable.ic_menu_share)
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     setOnClickListener { openCastSettings(viewContext) }
+                    onButtonReady?.invoke { openCastSettings(viewContext) }
                     contentDescription = "Open Cast Settings"
                 }
             }

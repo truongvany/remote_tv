@@ -1,7 +1,9 @@
 package com.example.remote_tv.data.connection
 
+import android.content.Context
 import android.os.SystemClock
 import android.util.Log
+import com.example.remote_tv.data.adb.WirelessAdbConnectionManager
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.AppLaunchResult
 import com.example.remote_tv.data.model.TVBrand
@@ -12,6 +14,7 @@ import com.example.remote_tv.data.protocol.AndroidTVRemoteProtocol
 import com.example.remote_tv.data.protocol.LGProtocol
 import com.example.remote_tv.data.protocol.SamsungProtocol
 import com.example.remote_tv.data.protocol.TVProtocol
+import com.example.remote_tv.data.protocol.WirelessAdbProtocol
 import io.ktor.client.HttpClient
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -23,11 +26,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-class TVConnectionManager(private val client: HttpClient) {
+class TVConnectionManager(context: Context, private val client: HttpClient) {
 
     private val TAG = "TVConnection"
+    private val appContext = context.applicationContext
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private val _currentDevice = MutableStateFlow<TVDevice?>(null)
@@ -46,6 +51,19 @@ class TVConnectionManager(private val client: HttpClient) {
     private var lastConnectedDevice: TVDevice? = null
     private var connectJob: Job? = null
     private var currentConnectAttemptCount: Int = 0
+    private var lastAdbTargetPort: Int? = null
+    private val wirelessAdbManager by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        WirelessAdbConnectionManager.getInstance(appContext)
+    }
+
+    private fun getWirelessAdbManagerOrNull(): WirelessAdbConnectionManager? {
+        return try {
+            wirelessAdbManager
+        } catch (t: Throwable) {
+            InAppDiagnostics.error(TAG, "[ADB_PAIR] manager_init_error=${t.message}")
+            null
+        }
+    }
 
     fun connect(device: TVDevice) {
         if (_connectingDeviceKey.value != null) {
@@ -63,6 +81,7 @@ class TVConnectionManager(private val client: HttpClient) {
             _connectingDeviceKey.value = targetKey
             _playbackState.value = PlaybackState.IDLE
             currentConnectAttemptCount = 0
+            lastAdbTargetPort = null
 
             Log.d(TAG, "Connecting to ${device.name} at ${device.ipAddress}:${device.port}")
             InAppDiagnostics.info(
@@ -167,13 +186,14 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private suspend fun connectAndroidTV(device: TVDevice): TVProtocol? {
+        val candidatePorts = adbCandidatePortsFor(device)
         // remote2 TLS pairing (6466/6467) is not complete in this project yet.
         // To avoid false-positive "CONNECTED" state, use ADB as the only control-ready path for Android TV.
         InAppDiagnostics.warn(
             TAG,
-            "AndroidTV remote2 pairing is not fully implemented. Using ADB control path at ${device.ipAddress}:5555"
+            "AndroidTV remote2 pairing is not fully implemented. Using ADB control path at ${device.ipAddress}:${candidatePorts.joinToString("/")}"
         )
-        return connectViaAdb(device)
+        return connectViaAdb(device, preferredPorts = candidatePorts)
     }
 
     private suspend fun connectByPortHeuristics(device: TVDevice): TVProtocol? {
@@ -201,36 +221,67 @@ class TVConnectionManager(private val client: HttpClient) {
         return connectSamsungTV(device.copy(brand = TVBrand.SAMSUNG))
     }
 
-    private suspend fun connectViaAdb(device: TVDevice): TVProtocol? {
-        if (shouldRunAdbPortPrecheck(device.ipAddress)) {
-            val adbPortOpen = isTcpPortOpen(device.ipAddress, 5555, timeoutMs = 650)
-            if (!adbPortOpen) {
-                InAppDiagnostics.warn(
-                    TAG,
-                    "[ADB_CONNECT] precheck failed: ${device.ipAddress}:5555 is closed/unreachable"
-                )
-                return null
-            }
+    private suspend fun connectViaAdb(
+        device: TVDevice,
+        preferredPorts: List<Int> = adbCandidatePortsFor(device),
+    ): TVProtocol? {
+        val candidatePorts = preferredPorts.distinct().filter { it in 1..65535 }
+        if (candidatePorts.isEmpty()) {
+            return null
         }
 
-        val adb = AdbProtocol()
-        currentConnectAttemptCount++
-        val startTime = android.os.SystemClock.elapsedRealtime()
-        InAppDiagnostics.info(
-            TAG,
-            "[ADB_CONNECT] target=${device.ipAddress}:5555 timeout=35000ms (bao gồm thời gian chờ user chấp nhận trên TV)"
-        )
-        // Timeout 35s: 3s TCP connect + 4s initial auth + 30s chờ user bấm OK trên TV
-        val connected = withTimeoutOrNull(35_000L) {
-            adb.connect(device.ipAddress, 5555)
-        } ?: false
-        val elapsed = android.os.SystemClock.elapsedRealtime() - startTime
-        if (connected) {
-            InAppDiagnostics.info(TAG, "[ADB_CONNECT] success elapsed=${elapsed}ms")
-            return adb
+        candidatePorts.forEach { adbPort ->
+            lastAdbTargetPort = adbPort
+
+            if (shouldRunAdbPortPrecheck(device.ipAddress)) {
+                val adbPortOpen = isTcpPortOpen(device.ipAddress, adbPort, timeoutMs = 650)
+                if (!adbPortOpen) {
+                    InAppDiagnostics.warn(
+                        TAG,
+                        "[ADB_CONNECT] precheck failed: ${device.ipAddress}:$adbPort is closed/unreachable"
+                    )
+                    return@forEach
+                }
+            }
+
+            val adb = AdbProtocol()
+            currentConnectAttemptCount++
+            val startTime = android.os.SystemClock.elapsedRealtime()
+            InAppDiagnostics.info(
+                TAG,
+                "[ADB_CONNECT] target=${device.ipAddress}:$adbPort timeout=35000ms (bao gồm thời gian chờ user chấp nhận trên TV)"
+            )
+            // Timeout 35s: 3s TCP connect + 4s initial auth + 30s chờ user bấm OK trên TV
+            val connected = withTimeoutOrNull(35_000L) {
+                adb.connect(device.ipAddress, adbPort)
+            } ?: false
+            val elapsed = android.os.SystemClock.elapsedRealtime() - startTime
+            if (connected) {
+                InAppDiagnostics.info(TAG, "[ADB_CONNECT] success target=${device.ipAddress}:$adbPort elapsed=${elapsed}ms")
+                return adb
+            }
+
+            InAppDiagnostics.warn(TAG, "[ADB_CONNECT] failed target=${device.ipAddress}:$adbPort elapsed=${elapsed}ms")
+            runCatching { adb.disconnect() }
         }
-        InAppDiagnostics.warn(TAG, "[ADB_CONNECT] failed elapsed=${elapsed}ms")
+
         return null
+    }
+
+    private fun adbCandidatePortsFor(device: TVDevice): List<Int> {
+        val ports = mutableListOf<Int>()
+        val requestedPort = device.port
+        val looksLikeAdbConnectPort = requestedPort == 5555 || requestedPort in 30000..65535
+
+        if (looksLikeAdbConnectPort) {
+            ports += requestedPort
+        }
+
+        if (5555 !in ports) {
+            ports += 5555
+        }
+
+        return ports
     }
 
     private fun shouldRunAdbPortPrecheck(ipAddress: String): Boolean {
@@ -260,9 +311,12 @@ class TVConnectionManager(private val client: HttpClient) {
                         "Hãy bật ADB Debugging trên TV: Settings → Hệ thống → Thông tin → bấm Build Number 7 lần → Developer Options → USB Debugging: ON → Network Debugging: ON."
                 } else if (device.port == 6466 || device.port == 6467) {
                     "Đã phát hiện Android TV Remote service (port ${device.port}) nhưng luồng TLS pairing remote2 chưa hoàn chỉnh trong phiên bản này. " +
-                        "Vui lòng bật ADB Debugging + Network Debugging để app điều khiển qua cổng 5555."
+                        "Vui lòng bật ADB Debugging + Network Debugging để app điều khiển qua ADB. " +
+                        "Nếu TV chỉ có Wireless Debugging dạng pair code, hãy ghép đôi trước rồi nhập đúng cổng kết nối (có thể không phải 5555)."
                 } else {
-                    "Không kết nối được Android TV tại ${device.ipAddress}. Đảm bảo TV và điện thoại cùng WiFi, sau đó bật USB Debugging + Network Debugging trên TV để điều khiển qua ADB (5555)."
+                    val adbPortHint = lastAdbTargetPort ?: 5555
+                    "Không kết nối được Android TV tại ${device.ipAddress}. Đảm bảo TV và điện thoại cùng WiFi, sau đó bật USB Debugging + Network Debugging trên TV để điều khiển qua ADB. " +
+                        "Cổng vừa thử: $adbPortHint (nhiều TV dùng cổng Wireless Debugging khác 5555)."
                 }
             }
             TVBrand.SAMSUNG -> {
@@ -332,6 +386,88 @@ class TVConnectionManager(private val client: HttpClient) {
         }
     }
 
+    suspend fun pairAndConnectAndroidTv(
+        device: TVDevice,
+        pairPort: Int,
+        pairingCode: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val sanitizedCode = pairingCode.trim().filter { it.isDigit() }
+        if (sanitizedCode.length < 6) {
+            _connectionError.value = "Mã pair không hợp lệ. Hãy nhập mã 6 số trên TV."
+            return@withContext false
+        }
+
+        val targetKey = device.toConnectionKey()
+        connectJob?.cancel()
+
+        activeProtocol?.disconnect()
+        activeProtocol = null
+        _currentDevice.value = null
+        _connectionError.value = null
+        _connectingDeviceKey.value = targetKey
+        _playbackState.value = PlaybackState.IDLE
+        currentConnectAttemptCount = 0
+        lastAdbTargetPort = device.port
+
+        InAppDiagnostics.info(
+            TAG,
+            "[ADB_PAIR] start target=${device.ipAddress}:${device.port} pairPort=$pairPort",
+        )
+
+        val manager = getWirelessAdbManagerOrNull()
+        if (manager == null) {
+            _connectionError.value = "Không thể khởi tạo ADB pair engine trên thiết bị này."
+            return@withContext false
+        }
+
+        return@withContext try {
+            val paired = withTimeoutOrNull(25_000L) {
+                manager.pair(device.ipAddress, pairPort, sanitizedCode)
+            } ?: false
+
+            if (!paired) {
+                _connectionError.value = "Ghép đôi ADB thất bại. Kiểm tra lại Pair Port và mã pair trên TV."
+                InAppDiagnostics.warn(TAG, "[ADB_PAIR] failed target=${device.ipAddress}:$pairPort")
+                false
+            } else {
+                InAppDiagnostics.info(TAG, "[ADB_PAIR] success target=${device.ipAddress}:$pairPort")
+
+                val protocol = WirelessAdbProtocol(manager)
+                val connected = withTimeoutOrNull(20_000L) {
+                    protocol.connect(device.ipAddress, device.port)
+                } ?: false
+
+                if (!connected) {
+                    _connectionError.value =
+                        "Pair thành công nhưng kết nối ADB thất bại ở cổng ${device.port}. Hãy kiểm tra Connect Port trên TV."
+                    InAppDiagnostics.warn(
+                        TAG,
+                        "[ADB_PAIR] connect_after_pair_failed target=${device.ipAddress}:${device.port}",
+                    )
+                    false
+                } else {
+                    activeProtocol = protocol
+                    _currentDevice.value = device.copy(isConnected = true)
+                    _playbackState.value = PlaybackState.IDLE
+                    lastConnectedDevice = device
+                    InAppDiagnostics.info(
+                        TAG,
+                        "[ADB_PAIR] connect_after_pair_success target=${device.ipAddress}:${device.port}",
+                    )
+                    true
+                }
+            }
+        } catch (e: Exception) {
+            _connectionError.value = "Ghép đôi thất bại: ${e.message ?: "unknown"}"
+            InAppDiagnostics.error(TAG, "[ADB_PAIR] error=${e.message}")
+            false
+        } finally {
+            if (_connectingDeviceKey.value == targetKey) {
+                _connectingDeviceKey.value = null
+            }
+        }
+    }
+
     suspend fun sendCommand(command: String): Boolean {
         val protocol = activeProtocol
         InAppDiagnostics.info(TAG, "[COMMAND_SEND] request=$command")
@@ -395,7 +531,7 @@ class TVConnectionManager(private val client: HttpClient) {
             return AppLaunchResult.success(appId, mappedAppId)
         }
 
-        if (device.brand == TVBrand.ANDROID_TV && protocol !is AdbProtocol) {
+        if (device.brand == TVBrand.ANDROID_TV && protocol !is AdbProtocol && protocol !is WirelessAdbProtocol) {
             val adbSuccess = launchAndroidTvViaAdb(device, appId)
             if (adbSuccess) {
                 InAppDiagnostics.info(TAG, "[APP_LAUNCH] success via_adb appId=$appId")
@@ -428,24 +564,32 @@ class TVConnectionManager(private val client: HttpClient) {
     }
 
     private suspend fun launchAndroidTvViaAdb(device: TVDevice, appId: String): Boolean {
-        val adb = AdbProtocol()
-        return try {
-            val connected = withTimeoutOrNull(10_000L) {
-                adb.connect(device.ipAddress, 5555)
-            } ?: false
+        val candidatePorts = adbCandidatePortsFor(device)
+        candidatePorts.forEach { adbPort ->
+            val adb = AdbProtocol()
+            try {
+                val connected = withTimeoutOrNull(10_000L) {
+                    adb.connect(device.ipAddress, adbPort)
+                } ?: false
 
-            if (!connected) {
-                InAppDiagnostics.warn(TAG, "[APP_LAUNCH] adb_fallback_connect_failed target=${device.ipAddress}:5555")
-                return false
+                if (!connected) {
+                    InAppDiagnostics.warn(TAG, "[APP_LAUNCH] adb_fallback_connect_failed target=${device.ipAddress}:$adbPort")
+                    return@forEach
+                }
+
+                val launched = adb.launchApp(appId)
+                if (launched) {
+                    InAppDiagnostics.info(TAG, "[APP_LAUNCH] adb_fallback_success target=${device.ipAddress}:$adbPort")
+                    return true
+                }
+            } catch (e: Exception) {
+                InAppDiagnostics.error(TAG, "[APP_LAUNCH] adb_fallback_error target=${device.ipAddress}:$adbPort error=${e.message}")
+            } finally {
+                runCatching { adb.disconnect() }
             }
-
-            adb.launchApp(appId)
-        } catch (e: Exception) {
-            InAppDiagnostics.error(TAG, "[APP_LAUNCH] adb_fallback_error=${e.message}")
-            false
-        } finally {
-            runCatching { adb.disconnect() }
         }
+
+        return false
     }
 
     private suspend fun launchBySearchFallback(appId: String): Boolean {
@@ -529,7 +673,7 @@ class TVConnectionManager(private val client: HttpClient) {
             }
         }
 
-        if (protocol is AndroidTVRemoteProtocol || protocol is AdbProtocol) {
+        if (protocol is AndroidTVRemoteProtocol || protocol is AdbProtocol || protocol is WirelessAdbProtocol) {
             return when (command) {
                 "KEY_VOICE" -> listOf("KEY_VOICE", "VOICE")
                 "KEY_SEARCH" -> listOf("KEY_SEARCH", "SEARCH")

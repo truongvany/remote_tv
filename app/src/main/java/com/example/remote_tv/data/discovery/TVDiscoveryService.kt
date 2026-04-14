@@ -3,10 +3,12 @@ package com.example.remote_tv.data.discovery
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
 import android.util.Log
 import com.example.remote_tv.data.debug.InAppDiagnostics
 import com.example.remote_tv.data.model.TVBrand
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.model.isCastOnlyEndpoint
 import java.net.Inet4Address
 import java.net.InetAddress
 import kotlinx.coroutines.CancellationException
@@ -23,11 +25,13 @@ import kotlinx.coroutines.launch
 class TVDiscoveryService(context: Context) {
 
     private val TAG = "TVDiscovery"
+    private val appContext = context.applicationContext
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val subnetScanner = LocalSubnetScanner(context)
     private val discoveryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val quickScanPorts = listOf(8008, 8009, 5555, 6466, 6467)
-    private val defaultScanPorts = listOf(6466, 6467, 5555, 8008, 8009, 8002, 8060, 3000, 7236)
+    // Keep subnet scan focused on control-ready ports to reduce false positives.
+    private val quickScanPorts = listOf(5555, 6466, 6467, 8001, 8002, 3000)
+    private val defaultScanPorts = listOf(5555, 6466, 6467, 8001, 8002, 3000, 8008, 8009)
     private val deviceLock = Any()
 
     private val _discoveredDevices = MutableStateFlow<List<TVDevice>>(emptyList())
@@ -41,12 +45,16 @@ class TVDiscoveryService(context: Context) {
 
     private var castListener: NsdManager.DiscoveryListener? = null
     private var remoteListener: NsdManager.DiscoveryListener? = null
+    private var adbTlsPairingListener: NsdManager.DiscoveryListener? = null
+    private var adbTlsConnectListener: NsdManager.DiscoveryListener? = null
     private var samsungListener: NsdManager.DiscoveryListener? = null
     private var rokuListener: NsdManager.DiscoveryListener? = null
     private var deepScanJob: Job? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     fun startDiscovery() {
         stopDiscovery()
+        acquireMulticastLockIfNeeded()
         _discoveredDevices.value = emptyList()
         _scanError.value = null
         _isScanning.value = true
@@ -54,6 +62,8 @@ class TVDiscoveryService(context: Context) {
 
         castListener = buildListener("_googlecast._tcp")
         remoteListener = buildListener("_androidtvremote2._tcp")
+        adbTlsPairingListener = buildListener("_adb-tls-pairing._tcp")
+        adbTlsConnectListener = buildListener("_adb-tls-connect._tcp")
         samsungListener = buildListener("_samsungmsf._tcp")
         rokuListener = buildListener("_roku-ecp._tcp")
 
@@ -68,6 +78,18 @@ class TVDiscoveryService(context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "AndroidTVRemote discovery error: ${e.message}")
             InAppDiagnostics.error(TAG, "AndroidTV NSD error: ${e.message}")
+        }
+        try {
+            nsdManager.discoverServices("_adb-tls-pairing._tcp", NsdManager.PROTOCOL_DNS_SD, adbTlsPairingListener)
+        } catch (e: Exception) {
+            Log.e(TAG, "ADB TLS pairing discovery error: ${e.message}")
+            InAppDiagnostics.error(TAG, "ADB TLS pairing NSD error: ${e.message}")
+        }
+        try {
+            nsdManager.discoverServices("_adb-tls-connect._tcp", NsdManager.PROTOCOL_DNS_SD, adbTlsConnectListener)
+        } catch (e: Exception) {
+            Log.e(TAG, "ADB TLS connect discovery error: ${e.message}")
+            InAppDiagnostics.error(TAG, "ADB TLS NSD error: ${e.message}")
         }
         try {
             nsdManager.discoverServices("_samsungmsf._tcp", NsdManager.PROTOCOL_DNS_SD, samsungListener)
@@ -122,17 +144,55 @@ class TVDiscoveryService(context: Context) {
         deepScanJob = null
         castListener?.let { try { nsdManager.stopServiceDiscovery(it) } catch (_: Exception) {} }
         remoteListener?.let { try { nsdManager.stopServiceDiscovery(it) } catch (_: Exception) {} }
+        adbTlsPairingListener?.let { try { nsdManager.stopServiceDiscovery(it) } catch (_: Exception) {} }
+        adbTlsConnectListener?.let { try { nsdManager.stopServiceDiscovery(it) } catch (_: Exception) {} }
         samsungListener?.let { try { nsdManager.stopServiceDiscovery(it) } catch (_: Exception) {} }
         rokuListener?.let { try { nsdManager.stopServiceDiscovery(it) } catch (_: Exception) {} }
         castListener = null
         remoteListener = null
+        adbTlsPairingListener = null
+        adbTlsConnectListener = null
         samsungListener = null
         rokuListener = null
         _isScanning.value = false
+        releaseMulticastLock()
         InAppDiagnostics.info(TAG, "Stop discovery")
     }
 
-    private fun buildListener(@Suppress("UNUSED_PARAMETER") serviceType: String): NsdManager.DiscoveryListener {
+    private fun acquireMulticastLockIfNeeded() {
+        if (multicastLock?.isHeld == true) {
+            return
+        }
+
+        runCatching {
+            val wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val lock = wifiManager?.createMulticastLock("remote-tv-cast-discovery")
+            lock?.setReferenceCounted(false)
+            lock?.acquire()
+            multicastLock = lock
+            if (lock != null) {
+                InAppDiagnostics.info(TAG, "Multicast lock acquired")
+            } else {
+                InAppDiagnostics.warn(TAG, "Multicast lock unavailable on this device")
+            }
+        }.onFailure { error ->
+            InAppDiagnostics.warn(TAG, "Multicast lock acquire failed: ${error.message}")
+        }
+    }
+
+    private fun releaseMulticastLock() {
+        runCatching {
+            if (multicastLock?.isHeld == true) {
+                multicastLock?.release()
+                InAppDiagnostics.info(TAG, "Multicast lock released")
+            }
+        }.onFailure { error ->
+            InAppDiagnostics.warn(TAG, "Multicast lock release failed: ${error.message}")
+        }
+        multicastLock = null
+    }
+
+    private fun buildListener(serviceType: String): NsdManager.DiscoveryListener {
         return object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(regType: String) {
                 Log.d(TAG, "Discovery started: $regType")
@@ -148,13 +208,17 @@ class TVDiscoveryService(context: Context) {
                     override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
                         val host = resolveServiceHostAddress(serviceInfo) ?: return
                         val name = serviceInfo.serviceName
+                        val discoveredType = serviceInfo.serviceType.ifBlank { serviceType }
+                        val isAdbPairingService = discoveredType.contains("adb-tls-pairing", true)
                         val brand = when {
-                            serviceInfo.serviceType.contains("androidtvremote2", true) -> TVBrand.ANDROID_TV
-                            serviceInfo.serviceType.contains("samsungmsf", true) -> TVBrand.SAMSUNG
-                            serviceInfo.serviceType.contains("roku-ecp", true) -> TVBrand.ROKU
+                            discoveredType.contains("androidtvremote2", true) -> TVBrand.ANDROID_TV
+                            isAdbPairingService -> TVBrand.ANDROID_TV
+                            discoveredType.contains("adb-tls-connect", true) -> TVBrand.ANDROID_TV
+                            discoveredType.contains("samsungmsf", true) -> TVBrand.SAMSUNG
+                            discoveredType.contains("roku-ecp", true) -> TVBrand.ROKU
                             name.contains("Samsung", true) -> TVBrand.SAMSUNG
                             name.contains("LG", true) -> TVBrand.LG
-                            serviceInfo.serviceType.contains("googlecast", true) -> TVBrand.ANDROID_TV
+                            discoveredType.contains("googlecast", true) -> TVBrand.ANDROID_TV
                             else -> TVBrand.UNKNOWN
                         }
                         val device = TVDevice(
@@ -162,7 +226,8 @@ class TVDiscoveryService(context: Context) {
                             name = name,
                             ipAddress = host,
                             port = serviceInfo.port,
-                            brand = brand
+                            brand = brand,
+                            pairPort = if (isAdbPairingService) serviceInfo.port else null,
                         )
                         Log.d(TAG, "Resolved: $name [$brand] at $host:${serviceInfo.port}")
                         InAppDiagnostics.info(TAG, "Resolved: $name [$brand] $host:${serviceInfo.port}")
@@ -205,13 +270,44 @@ class TVDiscoveryService(context: Context) {
     }
 
     private fun mergeDevice(existing: TVDevice, incoming: TVDevice): TVDevice {
-        val preferred = if (deviceQuality(incoming) >= deviceQuality(existing)) incoming else existing
+        val preferred = if (selectionScore(incoming) >= selectionScore(existing)) incoming else existing
+        val secondary = if (preferred === incoming) existing else incoming
+
+        // Prefer non-scan identifiers when quality is similar.
+        val preferredId = when {
+            !preferred.id.startsWith("scan-") -> preferred.id
+            !secondary.id.startsWith("scan-") -> secondary.id
+            else -> preferred.id
+        }
+
         return existing.copy(
-            id = preferred.id,
+            id = preferredId,
             name = preferred.name,
             port = preferred.port,
             brand = preferred.brand,
+            pairPort = preferred.pairPort ?: secondary.pairPort,
         )
+    }
+
+    private fun selectionScore(device: TVDevice): Int {
+        return endpointPriority(device) * 10 + deviceQuality(device)
+    }
+
+    private fun endpointPriority(device: TVDevice): Int {
+        if (device.isCastOnlyEndpoint()) {
+            return 8
+        }
+
+        return when (device.port) {
+            5555 -> 62 // Most control-ready for Android TV in current project.
+            8002 -> 61
+            8001 -> 60
+            3000 -> 58
+            6466, 6467 -> 52
+            8008 -> 44
+            8009 -> if (device.brand == TVBrand.SAMSUNG) 50 else 8
+            else -> 20
+        }
     }
 
     private fun deviceQuality(device: TVDevice): Int {

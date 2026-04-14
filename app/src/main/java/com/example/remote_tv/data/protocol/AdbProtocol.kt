@@ -211,6 +211,10 @@ class AdbProtocol : TVProtocol {
             return@withContext sendSearchQuery(query)
         }
 
+        if (command == "KEY_SEARCH" || command == "SEARCH") {
+            return@withContext openSearchOnTv()
+        }
+
         if (command.startsWith("TEXT:")) {
             val rawText = command.substring(5)
             val normalized = Normalizer.normalize(rawText, Normalizer.Form.NFC)
@@ -423,6 +427,33 @@ class AdbProtocol : TVProtocol {
             TAG,
             "ADB search intent failed for query='${query.take(32)}'"
         )
+        return false
+    }
+
+    private fun openSearchOnTv(): Boolean {
+        val keyEventResult = sendShellCommandDetailed("input keyevent 84\n")
+        if (keyEventResult.success) {
+            InAppDiagnostics.info(TAG, "ADB open search success: keyevent 84")
+            return true
+        }
+
+        val searchResult = sendShellCommandDetailed(
+            "am start -a android.intent.action.SEARCH\n"
+        )
+        if (searchResult.success) {
+            InAppDiagnostics.info(TAG, "ADB open search success: ACTION_SEARCH")
+            return true
+        }
+
+        val webSearchResult = sendShellCommandDetailed(
+            "am start -a android.intent.action.WEB_SEARCH\n"
+        )
+        if (webSearchResult.success) {
+            InAppDiagnostics.info(TAG, "ADB open search success: ACTION_WEB_SEARCH")
+            return true
+        }
+
+        InAppDiagnostics.warn(TAG, "ADB open search failed on intent + keyevent paths")
         return false
     }
 
