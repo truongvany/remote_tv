@@ -85,7 +85,7 @@ fun CastScreen(
             color = MaterialTheme.colorScheme.onBackground,
             fontSize = 28.sp,
             fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp
+            letterSpacing = 2.2.sp
         )
         Text(
             text = if (isScanning) "DETECTING NEARBY DISPLAYS..." else "SCAN COMPLETE",
