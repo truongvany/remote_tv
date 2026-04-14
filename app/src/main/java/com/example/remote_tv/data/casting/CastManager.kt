@@ -31,6 +31,7 @@ class CastManager(private val context: Context) {
 
     private var castContext: CastContext? = null
     private var currentSession: CastSession? = null
+    private var sessionListenerRegistered = false
     private val localMediaServer = LocalMediaServer(context.applicationContext)
 
     private val sessionListener = object : SessionManagerListener<CastSession> {
@@ -98,18 +99,7 @@ class CastManager(private val context: Context) {
     }
 
     init {
-        try {
-            castContext = CastContext.getSharedInstance(context)
-            castContext?.sessionManager?.addSessionManagerListener(sessionListener, CastSession::class.java)
-            currentSession = castContext?.sessionManager?.currentCastSession
-            if (currentSession != null) {
-                _isCasting.value = true
-                _castStatus.value = "Cast connected: ${currentSession?.castDevice?.friendlyName ?: "TV"}"
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Cast SDK not initialized: ${e.message}")
-            InAppDiagnostics.warn(TAG, "Cast SDK init failed: ${e.message}")
-        }
+        ensureCastContextInitialized()
     }
 
     /**
@@ -157,7 +147,7 @@ class CastManager(private val context: Context) {
     }
 
     fun stopCasting() {
-        castContext?.sessionManager?.endCurrentSession(true)
+        ensureCastContextInitialized()?.sessionManager?.endCurrentSession(true)
         _isCasting.value = false
         _castStatus.value = "Tap cast icon to connect"
     }
@@ -179,8 +169,11 @@ class CastManager(private val context: Context) {
     }
 
     fun release() {
-        runCatching {
-            castContext?.sessionManager?.removeSessionManagerListener(sessionListener, CastSession::class.java)
+        if (sessionListenerRegistered) {
+            runCatching {
+                castContext?.sessionManager?.removeSessionManagerListener(sessionListener, CastSession::class.java)
+            }
+            sessionListenerRegistered = false
         }
         localMediaServer.clear()
     }
@@ -192,7 +185,8 @@ class CastManager(private val context: Context) {
         metadataType: Int,
         streamType: Int,
     ): Boolean {
-        val session = castContext?.sessionManager?.currentCastSession ?: currentSession
+        val contextRef = ensureCastContextInitialized()
+        val session = contextRef?.sessionManager?.currentCastSession ?: currentSession
         if (session == null) {
             _castError.value = "No active cast session. Tap cast icon to choose Google TV."
             _castStatus.value = "Cast session unavailable"
@@ -224,5 +218,38 @@ class CastManager(private val context: Context) {
         Log.d(TAG, "Casting media: $url")
         InAppDiagnostics.info(TAG, "Casting media title=$title type=$contentType")
         return true
+    }
+
+    private fun ensureCastContextInitialized(): CastContext? {
+        castContext?.let { existing ->
+            if (!sessionListenerRegistered) {
+                runCatching {
+                    existing.sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
+                    sessionListenerRegistered = true
+                }.onFailure { error ->
+                    InAppDiagnostics.warn(TAG, "Cast listener register failed: ${error.message}")
+                }
+            }
+            currentSession = existing.sessionManager.currentCastSession
+            return existing
+        }
+
+        return try {
+            val initialized = CastContext.getSharedInstance(context)
+            castContext = initialized
+            initialized.sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
+            sessionListenerRegistered = true
+            currentSession = initialized.sessionManager.currentCastSession
+            if (currentSession != null) {
+                _isCasting.value = true
+                _castStatus.value = "Cast connected: ${currentSession?.castDevice?.friendlyName ?: "TV"}"
+            }
+            InAppDiagnostics.info(TAG, "Cast context initialized")
+            initialized
+        } catch (e: Exception) {
+            Log.w(TAG, "Cast SDK not initialized: ${e.message}")
+            InAppDiagnostics.warn(TAG, "Cast SDK init failed: ${e.message}")
+            null
+        }
     }
 }

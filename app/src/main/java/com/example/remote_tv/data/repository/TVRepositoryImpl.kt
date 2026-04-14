@@ -68,7 +68,7 @@ class TVRepositoryImpl(context: Context) : TVRepository {
     }
 
     private val discoveryService = TVDiscoveryService(context)
-    private val connectionManager = TVConnectionManager(httpClient)
+    private val connectionManager = TVConnectionManager(context, httpClient)
     private val appPrefs = AppPreferencesRepository(context)
     private val appListFetcher = TVAppListFetcher(httpClient)
 
@@ -106,6 +106,18 @@ class TVRepositoryImpl(context: Context) : TVRepository {
 
     override fun scheduleReconnect() {
         connectionManager.scheduleReconnect()
+    }
+
+    override suspend fun pairAndConnectAndroidTv(
+        device: TVDevice,
+        pairPort: Int,
+        pairingCode: String,
+    ): Boolean {
+        return connectionManager.pairAndConnectAndroidTv(
+            device = device,
+            pairPort = pairPort,
+            pairingCode = pairingCode,
+        )
     }
 
     override suspend fun sendCommand(command: String): Boolean {

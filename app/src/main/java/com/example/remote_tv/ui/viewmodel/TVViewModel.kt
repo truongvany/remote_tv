@@ -1,6 +1,7 @@
 package com.example.remote_tv.ui.viewmodel
 
 import android.app.Application
+import android.os.Build
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -22,6 +23,7 @@ import com.example.remote_tv.data.model.Macro
 import com.example.remote_tv.data.model.PlaybackState
 import com.example.remote_tv.data.model.TVApp
 import com.example.remote_tv.data.model.TVDevice
+import com.example.remote_tv.data.model.isCastOnlyEndpoint
 import com.example.remote_tv.data.model.toTVDevice
 import com.example.remote_tv.data.network.WakeOnLanSender
 import com.example.remote_tv.data.casting.CastManager
@@ -100,7 +102,7 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     init {
         _uiState.update {
             it.copy(
-                hasLocationPermission = hasFineLocationPermission(),
+                hasLocationPermission = hasDiscoveryPermission(),
                 localIpAddress = resolveLocalIpv4Address(),
                 localSubnet = resolveLocalSubnet(),
             )
@@ -164,14 +166,15 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onLocationPermissionResult(granted: Boolean) {
+        val hasPermission = hasDiscoveryPermission()
         _uiState.update {
             it.copy(
-                hasLocationPermission = granted,
+                hasLocationPermission = hasPermission,
                 localIpAddress = resolveLocalIpv4Address(),
                 localSubnet = resolveLocalSubnet(),
             )
         }
-        if (granted && _uiState.value.selectedTab == 2 && settingsUiState.value.appSettings.autoScanOnCastTab) {
+        if (hasPermission && _uiState.value.selectedTab == 2 && settingsUiState.value.appSettings.autoScanOnCastTab) {
             repository.startDiscovery()
         }
     }
@@ -183,6 +186,14 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
     fun hideDeviceDialog() = _uiState.update { it.copy(showDeviceDialog = false) }
 
     fun connectToDevice(device: TVDevice) {
+        if (device.isCastOnlyEndpoint()) {
+            _uiState.update {
+                it.copy(actionMessage = "Thiết bị này chỉ hỗ trợ Cast media. Hãy dùng Connect Cast Session để ghép TV trước.")
+            }
+            hideDeviceDialog()
+            return
+        }
+
         repository.connectToDevice(device)
         hideDeviceDialog()
         // Lưu thiết bị vào disk để auto-reconnect lần sau
@@ -193,6 +204,41 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         // Sau khi kết nối xong, lấy danh sách app
         viewModelScope.launch {
             kotlinx.coroutines.delay(3000) // chờ kết nối ổn định
+            fetchInstalledApps()
+        }
+    }
+
+    fun pairAndConnectToDevice(device: TVDevice, pairPort: Int, pairCode: String, connectPort: Int) {
+        viewModelScope.launch {
+            val sanitizedCode = pairCode.trim().filter { it.isDigit() }
+            if (sanitizedCode.length < 6) {
+                _uiState.update { it.copy(actionMessage = "Mã pair không hợp lệ. Hãy nhập mã 6 số trên TV.") }
+                return@launch
+            }
+
+            if (connectPort !in 1..65535 || pairPort !in 1..65535) {
+                _uiState.update { it.copy(actionMessage = "Cổng pair/connect không hợp lệ.") }
+                return@launch
+            }
+
+            val targetDevice = device.copy(port = connectPort, brand = com.example.remote_tv.data.model.TVBrand.ANDROID_TV)
+            _uiState.update { it.copy(actionMessage = "Đang ghép đôi ${targetDevice.name}...") }
+
+            val success = repository.pairAndConnectAndroidTv(
+                device = targetDevice,
+                pairPort = pairPort,
+                pairingCode = sanitizedCode,
+            )
+
+            if (!success) {
+                _uiState.update { it.copy(actionMessage = "Ghép đôi thất bại. Kiểm tra lại mã pair và cổng trên TV.") }
+                return@launch
+            }
+
+            _uiState.update { it.copy(actionMessage = "Đã ghép đôi và kết nối ${targetDevice.name}") }
+            repository.saveLastDevice(targetDevice)
+            _lastDeviceName.value = targetDevice.name
+            delay(1500)
             fetchInstalledApps()
         }
     }
@@ -745,11 +791,27 @@ class TVViewModel(application: Application) : AndroidViewModel(application) {
         castManager.release()
     }
 
-    private fun hasFineLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            getApplication(),
+    private fun hasDiscoveryPermission(): Boolean {
+        val app = getApplication<Application>()
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            app,
             android.Manifest.permission.ACCESS_FINE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasFineLocation) {
+            return false
+        }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return true
+        }
+
+        val hasNearbyWifi = ContextCompat.checkSelfPermission(
+            app,
+            android.Manifest.permission.NEARBY_WIFI_DEVICES,
+        ) == PackageManager.PERMISSION_GRANTED
+
+        return hasNearbyWifi
     }
 
     private fun refreshNetworkDebugInfo() {
