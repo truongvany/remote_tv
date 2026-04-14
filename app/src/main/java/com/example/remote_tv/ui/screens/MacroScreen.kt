@@ -87,7 +87,7 @@ fun MacroScreen(viewModel: TVViewModel) {
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp,
-                    letterSpacing = 1.sp
+                    letterSpacing = 1.2.sp
                 )
                 Text(
                     text = "One-tap command sequences",
